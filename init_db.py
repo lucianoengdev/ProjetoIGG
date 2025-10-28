@@ -1,81 +1,64 @@
 import sqlite3
 
-# Conecta ao banco de dados (isso vai criar o arquivo projeto.db se ele não existir)
 conn = sqlite3.connect('projeto.db')
-
-# Cria um "cursor", que é o objeto que executa os comandos
 cursor = conn.cursor()
 
-# --- CRIA A TABELA ---
-# Primeiro, remove a tabela se ela já existir (para podermos rodar de novo se precisarmos)
+# Destrói a tabela 'estacas' antiga (se ela existir)
 cursor.execute('DROP TABLE IF EXISTS estacas')
 
-# Agora, cria a tabela "estacas" com todas as colunas que vamos precisar
-# Baseado na sua "Ficha de Cálculo" (Imagem 3) e na lista de 23 colunas.
-# Vamos criar colunas para os valores de FR (Frequência Relativa) e IGI (Índice de Gravidade Individual)
-# de cada grupo de defeito.
+# Cria a nova tabela 'estacas' com a estrutura correta (V2)
+# Refletindo a separação LE/LD e os cálculos de TRI/TRE
 cursor.execute('''
 CREATE TABLE estacas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     km REAL NOT NULL,
 
     -- Grupo 1 (Trincas Isoladas: FI, TTC, TTL, TLC, TLL, TRR)
-    area_g1 REAL,
-    fr_g1 REAL,
-    igi_g1 REAL,
+    area_g1_le REAL, fr_g1_le REAL, igi_g1_le REAL,
+    area_g1_ld REAL, fr_g1_ld REAL, igi_g1_ld REAL,
 
     -- Grupo 2 (FC-2: J, TB)
-    area_g2 REAL,
-    fr_g2 REAL,
-    igi_g2 REAL,
+    area_g2_le REAL, fr_g2_le REAL, igi_g2_le REAL,
+    area_g2_ld REAL, fr_g2_ld REAL, igi_g2_ld REAL,
 
     -- Grupo 3 (FC-3: JE, TBE)
-    area_g3 REAL,
-    fr_g3 REAL,
-    igi_g3 REAL,
+    area_g3_le REAL, fr_g3_le REAL, igi_g3_le REAL,
+    area_g3_ld REAL, fr_g3_ld REAL, igi_g3_ld REAL,
 
     -- Grupo 4 (Afundamentos: ALP, ATP, ALC, ATC)
-    area_g4 REAL,
-    fr_g4 REAL,
-    igi_g4 REAL,
+    area_g4_le REAL, fr_g4_le REAL, igi_g4_le REAL,
+    area_g4_ld REAL, fr_g4_ld REAL, igi_g4_ld REAL,
 
     -- Grupo 5 (Outros: O, P, E)
-    area_g5 REAL,
-    fr_g5 REAL,
-    igi_g5 REAL,
+    area_g5_le REAL, fr_g5_le REAL, igi_g5_le REAL,
+    area_g5_ld REAL, fr_g5_ld REAL, igi_g5_ld REAL,
 
     -- Grupo 6 (EX)
-    area_g6 REAL,
-    fr_g6 REAL,
-    igi_g6 REAL,
+    area_g6_le REAL, fr_g6_le REAL, igi_g6_le REAL,
+    area_g6_ld REAL, fr_g6_ld REAL, igi_g6_ld REAL,
 
     -- Grupo 7 (D)
-    area_g7 REAL,
-    fr_g7 REAL,
-    igi_g7 REAL,
+    area_g7_le REAL, fr_g7_le REAL, igi_g7_le REAL,
+    area_g7_ld REAL, fr_g7_ld REAL, igi_g7_ld REAL,
 
     -- Grupo 8 (R)
-    area_g8 REAL,
-    fr_g8 REAL,
-    igi_g8 REAL,
+    area_g8_le REAL, fr_g8_le REAL, igi_g8_le REAL,
+    area_g8_ld REAL, fr_g8_ld REAL, igi_g8_ld REAL,
 
-    -- Grupo 9 (TRI - da sua lista)
-    valor_tri REAL,
-    igi_tri REAL,
+    -- Valores Brutos de TRI e TRE (para cálculo posterior de Média e Variância)
+    -- (Estes são os valores xi da sua fórmula)
+    valor_tri_le REAL,
+    valor_tri_ld REAL,
+    valor_tre_le REAL,
+    valor_tre_ld REAL,
 
-    -- Grupo 10 (TRE - da sua lista)
-    valor_tre REAL,
-    igi_tre REAL,
-
-    -- O resultado final para esta estaca
+    -- O resultado final (IGI) para esta estaca (soma dos IGIs de G1 a G8)
     igg_total_estaca REAL
 );
 ''')
 
-# Salva as mudanças (commit)
 conn.commit()
-
-# Fecha a conexão
 conn.close()
 
-print("Banco de dados 'projeto.db' e tabela 'estacas' criados com sucesso!")
+print("Banco de dados 'projeto.db' atualizado com sucesso!")
+print("Tabela 'estacas' (V2) criada com a separação LE/LD e campos de TRI/TRE brutos.")
