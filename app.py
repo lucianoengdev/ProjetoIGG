@@ -1,7 +1,7 @@
 import os
 import sqlite3
 import pandas as pd
-import traceback # Novo: para imprimir erros detalhados
+import traceback
 from flask import Flask, render_template, request, redirect, url_for
 
 # --- 1. CONFIGURAÇÃO INICIAL E CONSTANTES ---
@@ -46,7 +46,7 @@ def normalizar_valor(valor):
 
     
 def processar_planilha(caminho_arquivo, linha_dados_str):
-    conn = sqlite3.connect('projeto.db') # Abre a conexão
+    conn = sqlite3.connect('projeto.db')
     try:
         cursor = conn.cursor()
         cursor.execute('DELETE FROM estacas')
@@ -59,7 +59,7 @@ def processar_planilha(caminho_arquivo, linha_dados_str):
             km = row.get(COLUNA_KM)
             if pd.isna(km) or str(km).strip() == "": continue
             
-            sql_data = {} # Dicionário de dados para esta estaca
+            sql_data = {}
             sql_data['km'] = normalizar_valor(km)
 
             ok_le = str(row.get(MAPA_COLUNAS_LE['OK'])).strip().upper() == 'SIM'
@@ -114,7 +114,6 @@ def processar_planilha(caminho_arquivo, linha_dados_str):
 
             # --- 9. INSERIR NO BANCO DE DADOS (V4 - Correção do Bug de Ordem) ---
             
-            # Lista de valores NA ORDEM EXATA do 'init_db.py'
             valores_ordenados = [
                 sql_data['km'],
                 sql_data['area_g1_le'], sql_data['fr_g1_le'], sql_data['igi_g1_le'],
@@ -140,20 +139,21 @@ def processar_planilha(caminho_arquivo, linha_dados_str):
             
             placeholders = ', '.join(['?' for _ in valores_ordenados])
             
-            # ESTA É A LISTA DE COLUNAS QUE CORRIGE O BUG
             sql_query = f"INSERT INTO estacas (km, area_g1_le, fr_g1_le, igi_g1_le, area_g1_ld, fr_g1_ld, igi_g1_ld, area_g2_le, fr_g2_le, igi_g2_le, area_g2_ld, fr_g2_ld, igi_g2_ld, area_g3_le, fr_g3_le, igi_g3_le, area_g3_ld, fr_g3_ld, igi_g3_ld, area_g4_le, fr_g4_le, igi_g4_le, area_g4_ld, fr_g4_ld, igi_g4_ld, area_g5_le, fr_g5_le, igi_g5_le, area_g5_ld, fr_g5_ld, igi_g5_ld, area_g6_le, fr_g6_le, igi_g6_le, area_g6_ld, fr_g6_ld, igi_g6_ld, area_g7_le, fr_g7_le, igi_g7_le, area_g7_ld, fr_g7_ld, igi_g7_ld, area_g8_le, fr_g8_le, igi_g8_le, area_g8_ld, fr_g8_ld, igi_g8_ld, valor_tri_le, valor_tri_ld, valor_tre_le, valor_tre_ld, igg_total_estaca) VALUES ({placeholders})"
             
             cursor.execute(sql_query, valores_ordenados)
 
         conn.commit()
         conn.close()
-        print("Processamento do Excel (V4) concluído. Banco de dados populado.")
+        
+        # --- MUDANÇA DE TESTE 1 ---
+        print("RODANDO VERSÃO 5 - O BUG DO 'NULL' TEM QUE SUMIR.")
         return True, None
 
     except Exception as e:
         print(f"ERRO NO PROCESSAMENTO: {e}")
         traceback.print_exc()
-        conn.rollback() # Desfaz qualquer mudança se der erro
+        conn.rollback()
         conn.close()
         return False, str(e)
 
@@ -183,8 +183,8 @@ def upload_file():
 
 @app.route('/relatorio')
 def relatorio():
-    # No Passo 6, vamos buscar os dados do SQL e mostrar gráficos aqui
-    return "Processamento Concluído! O relatório será exibido aqui."
+    # --- MUDANÇA DE TESTE 2 ---
+    return "Processamento V5 Concluído! O relatório será exibido aqui."
 
 if __name__ == '__main__':
     app.run(debug=True)
