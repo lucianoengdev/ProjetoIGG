@@ -159,11 +159,50 @@ def processar_planilha(caminho_arquivo, linha_dados_str):
             sql_data['valor_tri_ld'] = normalizar_valor(row.get(MAPA_COLUNAS_LD['TRI']))
             sql_data['valor_tre_ld'] = normalizar_valor(row.get(MAPA_COLUNAS_LD['TRE']))
 
-            # --- 9. INSERIR NO BANCO DE DADOS ---
-            colunas = list(sql_data.keys())
-            placeholders = ', '.join([f':{col}' for col in colunas])
-            sql_query = f"INSERT INTO estacas ({', '.join(colunas)}) VALUES ({placeholders})"
-            cursor.execute(sql_query, sql_data)
+            # --- 9. INSERIR NO BANCO DE DADOS (V4 - Correção do Bug de Ordem) ---
+
+            # Lista de valores NA ORDEM EXATA do 'init_db.py'
+            # Isso garante que a ordem de inserção é 100% correta.
+            valores_ordenados = [
+                sql_data['km'],
+                # G1
+                sql_data['area_g1_le'], sql_data['fr_g1_le'], sql_data['igi_g1_le'],
+                sql_data['area_g1_ld'], sql_data['fr_g1_ld'], sql_data['igi_g1_ld'],
+                # G2
+                sql_data['area_g2_le'], sql_data['fr_g2_le'], sql_data['igi_g2_le'],
+                sql_data['area_g2_ld'], sql_data['fr_g2_ld'], sql_data['igi_g2_ld'],
+                # G3
+                sql_data['area_g3_le'], sql_data['fr_g3_le'], sql_data['igi_g3_le'],
+                sql_data['area_g3_ld'], sql_data['fr_g3_ld'], sql_data['igi_g3_ld'],
+                # G4
+                sql_data['area_g4_le'], sql_data['fr_g4_le'], sql_data['igi_g4_le'],
+                sql_data['area_g4_ld'], sql_data['fr_g4_ld'], sql_data['igi_g4_ld'],
+                # G5
+                sql_data['area_g5_le'], sql_data['fr_g5_le'], sql_data['igi_g5_le'],
+                sql_data['area_g5_ld'], sql_data['fr_g5_ld'], sql_data['igi_g5_ld'],
+                # G6
+                sql_data['area_g6_le'], sql_data['fr_g6_le'], sql_data['igi_g6_le'],
+                sql_data['area_g6_ld'], sql_data['fr_g6_ld'], sql_data['igi_g6_ld'],
+                # G7
+                sql_data['area_g7_le'], sql_data['fr_g7_le'], sql_data['igi_g7_le'],
+                sql_data['area_g7_ld'], sql_data['fr_g7_ld'], sql_data['igi_g7_ld'],
+                # G8
+                sql_data['area_g8_le'], sql_data['fr_g8_le'], sql_data['igi_g8_le'],
+                sql_data['area_g8_ld'], sql_data['fr_g8_ld'], sql_data['igi_g8_ld'],
+                # TRI/TRE
+                sql_data['valor_tri_le'], sql_data['valor_tri_ld'],
+                sql_data['valor_tre_le'], sql_data['valor_tre_ld'],
+                # Final
+                sql_data['igg_total_estaca']
+            ]
+
+            # Cria uma string com 63 placeholders (?,?,?,...)
+            placeholders = ', '.join(['?' for _ in valores_ordenados])
+
+            # O id é AUTOINCREMENT, então não o incluímos na query
+            sql_query = f"INSERT INTO estacas (km, area_g1_le, fr_g1_le, igi_g1_le, area_g1_ld, fr_g1_ld, igi_g1_ld, area_g2_le, fr_g2_le, igi_g2_le, area_g2_ld, fr_g2_ld, igi_g2_ld, area_g3_le, fr_g3_le, igi_g3_le, area_g3_ld, fr_g3_ld, igi_g3_ld, area_g4_le, fr_g4_le, igi_g4_le, area_g4_ld, fr_g4_ld, igi_g4_ld, area_g5_le, fr_g5_le, igi_g5_le, area_g5_ld, fr_g5_ld, igi_g5_ld, area_g6_le, fr_g6_le, igi_g6_le, area_g6_ld, fr_g6_ld, igi_g6_ld, area_g7_le, fr_g7_le, igi_g7_le, area_g7_ld, fr_g7_ld, igi_g7_ld, area_g8_le, fr_g8_le, igi_g8_le, area_g8_ld, fr_g8_ld, igi_g8_ld, valor_tri_le, valor_tri_ld, valor_tre_le, valor_tre_ld, igg_total_estaca) VALUES ({placeholders})"
+
+            cursor.execute(sql_query, valores_ordenados)
 
         # Fim do "Grande Loop"
         conn.commit()
