@@ -112,8 +112,7 @@ def processar_planilha(caminho_arquivo, linha_dados_str):
             sql_data['valor_tri_ld'] = normalizar_valor(row.get(MAPA_COLUNAS_LD['TRI']))
             sql_data['valor_tre_ld'] = normalizar_valor(row.get(MAPA_COLUNAS_LD['TRE']))
 
-            # --- 9. INSERIR NO BANCO DE DADOS (V4 - Correção do Bug de Ordem) ---
-            
+            # --- 9. INSERIR NO BANCO DE DADOS (V4) ---
             valores_ordenados = [
                 sql_data['km'],
                 sql_data['area_g1_le'], sql_data['fr_g1_le'], sql_data['igi_g1_le'],
@@ -136,18 +135,39 @@ def processar_planilha(caminho_arquivo, linha_dados_str):
                 sql_data['valor_tre_le'], sql_data['valor_tre_ld'],
                 sql_data['igg_total_estaca']
             ]
-            
             placeholders = ', '.join(['?' for _ in valores_ordenados])
-            
             sql_query = f"INSERT INTO estacas (km, area_g1_le, fr_g1_le, igi_g1_le, area_g1_ld, fr_g1_ld, igi_g1_ld, area_g2_le, fr_g2_le, igi_g2_le, area_g2_ld, fr_g2_ld, igi_g2_ld, area_g3_le, fr_g3_le, igi_g3_le, area_g3_ld, fr_g3_ld, igi_g3_ld, area_g4_le, fr_g4_le, igi_g4_le, area_g4_ld, fr_g4_ld, igi_g4_ld, area_g5_le, fr_g5_le, igi_g5_le, area_g5_ld, fr_g5_ld, igi_g5_ld, area_g6_le, fr_g6_le, igi_g6_le, area_g6_ld, fr_g6_ld, igi_g6_ld, area_g7_le, fr_g7_le, igi_g7_le, area_g7_ld, fr_g7_ld, igi_g7_ld, area_g8_le, fr_g8_le, igi_g8_le, area_g8_ld, fr_g8_ld, igi_g8_ld, valor_tri_le, valor_tri_ld, valor_tre_le, valor_tre_ld, igg_total_estaca) VALUES ({placeholders})"
-            
             cursor.execute(sql_query, valores_ordenados)
+        # Fim do "Grande Loop"
+        
+        # --- (INÍCIO) SOLUÇÃO PROPOSTA POR VOCÊ ---
+        # Adiciona um loop de "limpeza" para converter NULL para 0.0
+        print("Iniciando limpeza de NULLs...")
+        
+        # Lista de todas as colunas que podem ter NULL (exceto 'km')
+        colunas_para_limpar = [
+            'area_g1_le', 'fr_g1_le', 'igi_g1_le', 'area_g1_ld', 'fr_g1_ld', 'igi_g1_ld',
+            'area_g2_le', 'fr_g2_le', 'igi_g2_le', 'area_g2_ld', 'fr_g2_ld', 'igi_g2_ld',
+            'area_g3_le', 'fr_g3_le', 'igi_g3_le', 'area_g3_ld', 'fr_g3_ld', 'igi_g3_ld',
+            'area_g4_le', 'fr_g4_le', 'igi_g4_le', 'area_g4_ld', 'fr_g4_ld', 'igi_g4_ld',
+            'area_g5_le', 'fr_g5_le', 'igi_g5_le', 'area_g5_ld', 'fr_g5_ld', 'igi_g5_ld',
+            'area_g6_le', 'fr_g6_le', 'igi_g6_le', 'area_g6_ld', 'fr_g6_ld', 'igi_g6_ld',
+            'area_g7_le', 'fr_g7_le', 'igi_g7_le', 'area_g7_ld', 'fr_g7_ld', 'igi_g7_ld',
+            'area_g8_le', 'fr_g8_le', 'igi_g8_le', 'area_g8_ld', 'fr_g8_ld', 'igi_g8_ld',
+            'valor_tri_le', 'valor_tri_ld', 'valor_tre_le', 'valor_tre_ld',
+            'igg_total_estaca'
+        ]
+        
+        for col in colunas_para_limpar:
+            cursor.execute(f"UPDATE estacas SET {col} = 0.0 WHERE {col} IS NULL")
+            
+        print("Limpeza de NULLs concluída.")
+        # --- (FIM) SOLUÇÃO PROPOSTA POR VOCÊ ---
 
-        conn.commit()
+        conn.commit() # Salva as inserções E a limpeza
         conn.close()
         
-        # --- MUDANÇA DE TESTE 1 ---
-        print("RODANDO VERSÃO 5 - O BUG DO 'NULL' TEM QUE SUMIR.")
+        print("RODANDO VERSÃO 6 (COM LIMPEZA DE NULL).")
         return True, None
 
     except Exception as e:
