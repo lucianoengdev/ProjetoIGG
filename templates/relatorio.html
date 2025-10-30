@@ -8,51 +8,58 @@
     <style>
         body { font-family: sans-serif; margin: 2em; background-color: #f9f9f9; }
         h1, h2 { color: #333; }
-        #graficoDiv { width: 100%; height: 500px; }
+        .grafico { width: 100%; height: 500px; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         th { background-color: #f2f2f2; }
         tr:nth-child(even) { background-color: #fafafa; }
         .container { max-width: 1200px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        hr { margin: 40px 0; border: 0; border-top: 1px solid #eee; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Relatório de Análise de IGG</h1>
-        
-        <h2>Linear de Ocorrência (IGG por Estaca)</h2>
-        <p>Este gráfico mostra o IGG Final (Defeitos G1-G8 + Flechas) calculado para cada estaca de 20m. As faixas coloridas indicam o "Conceito" do pavimento.</p>
-        <div id="graficoDiv"></div>
 
-        <hr style="margin: 40px 0;">
+        <h2>Linear de Ocorrência (IGI por Estaca)</h2>
+        <p>Este gráfico mostra o IGI (Índice de Gravidade Individual) para cada estaca de 20m.</p>
+        <div id="graficoDiv1" class="grafico"></div>
 
-        <h2>Resumo do IGG por Segmento (km)</h2>
-        <p>Esta tabela mostra o IGG médio para cada segmento de 1km, calculado a partir da média dos IGGs finais das estacas dentro dele.</p>
+        <hr>
+
+        <h2>IGG por Segmento (Soma)</h2>
+        <p>Este gráfico mostra o IGG (Índice de Gravidade Global = ΣIGI) para cada segmento de 1km.</p>
+        <div id="graficoDiv2" class="grafico"></div>
+
+        <hr>
+
+        <h2>Resumo por Segmento (km)</h2>
+        <p>Esta tabela mostra o IGG (Soma dos IGIs) e o trecho corrigido (+0.020km) para cada segmento.</p>
         <table>
             <thead>
                 <tr>
                     <th>Segmento (km)</th>
                     <th>Trecho Início</th>
-                    <th>Trecho Fim</th>
-                    <th>IGG Médio</th>
-                </tr>
+                    <th>Trecho Fim (Corrigido)</th>
+                    <th>IGG (Soma)</th> </tr>
             </thead>
             <tbody>
                 {% for segmento in segmentos %}
                 <tr>
                     <td>{{ segmento.km_segmento }}</td>
                     <td>{{ "%.3f"|format(segmento.km_inicio) }}</td>
-                    <td>{{ "%.3f"|format(segmento.km_fim) }}</td>
-                    <td>{{ "%.2f"|format(segmento.igg_medio) }}</td>
-                </tr>
+                    <td>{{ "%.3f"|format(segmento.km_fim_corrigido) }}</td> <td>{{ "%.2f"|format(segmento.igg_soma) }}</td> </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 
     <script>
-        var graphJSON = {{ graphJSON | safe }};
-        Plotly.newPlot('graficoDiv', graphJSON.data, graphJSON.layout);
+        var graphJSON1 = {{ graphJSON | safe }};
+        Plotly.newPlot('graficoDiv1', graphJSON1.data, graphJSON1.layout);
+
+        var graphJSON2 = {{ graphJSON2 | safe }};
+        Plotly.newPlot('graficoDiv2', graphJSON2.data, graphJSON2.layout);
     </script>
 </body>
 </html>
