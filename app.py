@@ -240,41 +240,43 @@ def relatorio():
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
-        # --- 1. DADOS PARA O GRÁFICO (AGORA USA O IGG FINAL) ---
+        # --- 1. DADOS PARA O GRÁFICO 1 (Linear de Ocorrência) ---
+        # (Esta parte continua igual, plotando o IGI de cada estaca)
         cursor.execute("SELECT km, igg_total_final_estaca FROM estacas ORDER BY km")
         estacas = cursor.fetchall()
 
         x_km = [row['km'] for row in estacas]
-        y_igg = [row['igg_total_final_estaca'] for row in estacas]
+        y_igg_estaca = [row['igg_total_final_estaca'] for row in estacas]
 
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=x_km, y=y_igg, mode='lines+markers', name='IGG por Estaca'))
+        fig1 = go.Figure()
+        fig1.add_trace(go.Scatter(x=x_km, y=y_igg_estaca, mode='lines+markers', name='IGI por Estaca'))
 
-        y_max = max(y_igg) if y_igg else 160 # Define um limite se não houver dados
+        y_max = max(y_igg_estaca) if y_igg_estaca else 160
 
-        # Faixas de "Conceito" (Imagem 2)
-        fig.add_hrect(y0=0, y1=20, line_width=0, fillcolor='green', opacity=0.1, layer="below", annotation_text="Ótimo", annotation_position="right")
-        fig.add_hrect(y0=20, y1=40, line_width=0, fillcolor='yellow', opacity=0.1, layer="below", annotation_text="Bom", annotation_position="right")
-        fig.add_hrect(y0=40, y1=80, line_width=0, fillcolor='orange', opacity=0.1, layer="below", annotation_text="Regular", annotation_position="right")
-        fig.add_hrect(y0=80, y1=160, line_width=0, fillcolor='red', opacity=0.1, layer="below", annotation_text="Ruim", annotation_position="right")
-        fig.add_hrect(y0=160, y1=max(161, y_max + 50), line_width=0, fillcolor='maroon', opacity=0.1, layer="below", annotation_text="Péssimo", annotation_position="right")
+        # Faixas de "Conceito"
+        fig1.add_hrect(y0=0, y1=20, line_width=0, fillcolor='green', opacity=0.1, layer="below", annotation_text="Ótimo", annotation_position="right")
+        fig1.add_hrect(y0=20, y1=40, line_width=0, fillcolor='yellow', opacity=0.1, layer="below", annotation_text="Bom", annotation_position="right")
+        fig1.add_hrect(y0=40, y1=80, line_width=0, fillcolor='orange', opacity=0.1, layer="below", annotation_text="Regular", annotation_position="right")
+        fig1.add_hrect(y0=80, y1=160, line_width=0, fillcolor='red', opacity=0.1, layer="below", annotation_text="Ruim", annotation_position="right")
+        fig1.add_hrect(y0=160, y1=max(161, y_max + 50), line_width=0, fillcolor='maroon', opacity=0.1, layer="below", annotation_text="Péssimo", annotation_position="right")
 
-        fig.update_layout(
-            title="Linear de Ocorrência (IGG Final por Estaca)",
+        fig1.update_layout(
+            title="Linear de Ocorrência (IGI por Estaca de 20m)",
             xaxis_title="Quilômetro (km)",
-            yaxis_title="IGG Final (Defeitos + Flechas)",
+            yaxis_title="IGI da Estaca (Defeitos + Flechas)",
             hovermode="x unified"
         )
 
-        graphJSON = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+        graphJSON1 = json.dumps(fig1, cls=plotly.utils.PlotlyJSONEncoder)
 
-        # --- 2. DADOS PARA A TABELA (AGORA USA O IGG FINAL) ---
+        # --- 2. DADOS PARA TABELA E GRÁFICO 2 (IGG por Segmento) ---
+        # (Implementa suas Correções 1 e 2)
         query_segmentos = """
             SELECT 
                 FLOOR(km) as km_segmento, 
-                AVG(igg_total_final_estaca) as igg_medio,
+                SUM(igg_total_final_estaca) as igg_soma, -- CORREÇÃO 1: SUM() em vez de AVG()
                 MIN(km) as km_inicio,
-                MAX(km) as km_fim
+                MAX(km) + 0.020 as km_fim_corrigido -- CORREÇÃO 2: Adiciona 0.020km
             FROM estacas
             GROUP BY km_segmento
             ORDER BY km_segmento
@@ -284,8 +286,42 @@ def relatorio():
 
         conn.close()
 
-        # Precisamos do `relatorio.html` que já criamos no Passo 6
-        return render_template('relatorio.html', graphJSON=graphJSON, segmentos=segmentos)
+        # --- 3. DADOS PARA O GRÁFICO 2 (Sua Correção 3) ---
+        x_segmento = [f"km {int(row['km_segmento'])}" for row in segmentos]
+        y_igg_soma = [row['igg_soma'] for row in segmentos]
+
+        fig2 = go.Figure()
+        fig2.add_trace(go.Scatter(
+            x=x_segmento, 
+            y=y_igg_soma, 
+            mode='lines+markers', 
+            name='IGG por Segmento'
+        ))
+
+        y_max_soma = max(y_igg_soma) if y_igg_soma else 160
+
+        # Adiciona as mesmas faixas de "Conceito"
+        fig2.add_hrect(y0=0, y1=20, line_width=0, fillcolor='green', opacity=0.1, layer="below", annotation_text="Ótimo", annotation_position="right")
+        fig2.add_hrect(y0=20, y1=40, line_width=0, fillcolor='yellow', opacity=0.1, layer="below", annotation_text="Bom", annotation_position="right")
+        fig2.add_hrect(y0=40, y1=80, line_width=0, fillcolor='orange', opacity=0.1, layer="below", annotation_text="Regular", annotation_position="right")
+        fig2.add_hrect(y0=80, y1=160, line_width=0, fillcolor='red', opacity=0.1, layer="below", annotation_text="Ruim", annotation_position="right")
+        fig2.add_hrect(y0=160, y1=max(161, y_max_soma + 50), line_width=0, fillcolor='maroon', opacity=0.1, layer="below", annotation_text="Péssimo", annotation_position="right")
+
+        fig2.update_layout(
+            title="IGG por Segmento (Soma dos IGIs)",
+            xaxis_title="Segmento de 1km",
+            yaxis_title="IGG (ΣIGI)",
+            hovermode="x unified"
+        )
+
+        graphJSON2 = json.dumps(fig2, cls=plotly.utils.PlotlyJSONEncoder)
+
+
+        # Envia os DOIS gráficos e a tabela corrigida para o HTML
+        return render_template('relatorio.html', 
+                               graphJSON=graphJSON1, 
+                               graphJSON2=graphJSON2, 
+                               segmentos=segmentos)
 
     except Exception as e:
         if conn: conn.close()
