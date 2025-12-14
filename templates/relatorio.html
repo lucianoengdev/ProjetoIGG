@@ -3,63 +3,148 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Relatório IGG</title>
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <title>Relatório DNIT 008 - Detalhado</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { font-family: sans-serif; margin: 2em; background-color: #f9f9f9; }
-        h1, h2 { color: #333; }
-        .grafico { width: 100%; height: 500px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
-        tr:nth-child(even) { background-color: #fafafa; }
-        .container { max-width: 1200px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        hr { margin: 40px 0; border: 0; border-top: 1px solid #eee; }
+        body { background-color: #f0f2f5; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .conceito-badge { font-weight: bold; padding: 4px 8px; border-radius: 4px; color: #fff; text-transform: uppercase; font-size: 0.8em;}
+        .bg-Otimo { background-color: #28a745; }
+        .bg-Bom { background-color: #9cdb43; color: #000; }
+        .bg-Regular { background-color: #ffc107; color: #000; }
+        .bg-Ruim { background-color: #fd7e14; }
+        .bg-Pessimo { background-color: #dc3545; }
+        
+        .memoria-calc { font-size: 0.85em; }
+        .memoria-calc th { background-color: #e9ecef; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Relatório de Análise de IGG</h1>
 
-        <h2>Linear de Ocorrência (IGI por Estaca)</h2>
-        <p>Este gráfico mostra o IGI (Índice de Gravidade Individual) para cada estaca de 20m.</p>
-        <div id="graficoDiv1" class="grafico"></div>
-
-        <hr>
-
-        <h2>IGG por Segmento (Soma)</h2>
-        <p>Este gráfico mostra o IGG (Índice de Gravidade Global = ΣIGI) para cada segmento de 1km.</p>
-        <div id="graficoDiv2" class="grafico"></div>
-
-        <hr>
-
-        <h2>Resumo por Segmento (km)</h2>
-        <p>Esta tabela mostra o IGG (Soma dos IGIs) e o trecho corrigido (+0.020km) para cada segmento.</p>
-        <table>
-            <thead>
-                <tr>
-                    <th>Segmento (km)</th>
-                    <th>Trecho Início</th>
-                    <th>Trecho Fim (Corrigido)</th>
-                    <th>IGG (Soma)</th> </tr>
-            </thead>
-            <tbody>
-                {% for segmento in segmentos %}
-                <tr>
-                    <td>{{ segmento.km_segmento }}</td>
-                    <td>{{ "%.3f"|format(segmento.km_inicio) }}</td>
-                    <td>{{ "%.3f"|format(segmento.km_fim_corrigido) }}</td> <td>{{ "%.2f"|format(segmento.igg_soma) }}</td> </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+<div class="container my-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3">Relatório de Avaliação - DNIT 008/2003</h1>
+        <div>
+            <a href="/" class="btn btn-outline-secondary btn-sm">Nova Análise</a>
+            <button onclick="window.print()" class="btn btn-primary btn-sm">Imprimir PDF</button>
+        </div>
     </div>
 
-    <script>
-        var graphJSON1 = {{ graphJSON | safe }};
-        Plotly.newPlot('graficoDiv1', graphJSON1.data, graphJSON1.layout);
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Perfil do IGGE</h5>
+            <canvas id="iggeChart" height="80"></canvas>
+        </div>
+    </div>
 
-        var graphJSON2 = {{ graphJSON2 | safe }};
-        Plotly.newPlot('graficoDiv2', graphJSON2.data, graphJSON2.layout);
-    </script>
+    <div class="card shadow-sm mb-5">
+        <div class="card-header bg-dark text-white">Quadro Resumo (Resultados por Segmento)</div>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 text-center align-middle">
+                <thead>
+                    <tr>
+                        <th>Início</th>
+                        <th>Fim</th>
+                        <th>Trincas</th>
+                        <th>Deform.</th>
+                        <th>Panelas</th>
+                        <th>IGGE</th>
+                        <th>IES</th>
+                        <th>Conceito</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in resultados %}
+                    <tr>
+                        <td>{{ row.km_inicial }}</td>
+                        <td>{{ row.km_final }}</td>
+                        <td>{{ row.freq_trincas }}</td>
+                        <td>{{ row.freq_deformacoes }}</td>
+                        <td>{{ row.freq_panelas }}</td>
+                        <td class="fw-bold">{{ "%.0f"|format(row.igge) }}</td>
+                        <td>{{ "%.1f"|format(row.ies) }}</td>
+                        <td><span class="conceito-badge bg-{{ row.conceito }}">{{ row.conceito }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <h4 class="mb-3 text-muted border-bottom pb-2">Memória de Cálculo Detalhada (Prova Real)</h4>
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-bordered table-striped memoria-calc mb-0 text-center align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th rowspan="2">Seg. (km)</th>
+                            <th rowspan="2">Total Estacas</th>
+                            <th colspan="3">Trincas (Peso 0.35)</th>
+                            <th colspan="3">Deformações (Peso 0.60)</th>
+                            <th colspan="2">Panelas (Peso 0.70)</th>
+                            <th rowspan="2">Cálculo Final IGGE</th>
+                        </tr>
+                        <tr>
+                            <th>Qtd.</th>
+                            <th>%</th>
+                            <th>Freq (Fat)</th>
+                            <th>Qtd.</th>
+                            <th>%</th>
+                            <th>Freq (Fat)</th>
+                            <th>Qtd.</th>
+                            <th>Freq (Fat)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in resultados %}
+                        <tr>
+                            <td class="fw-bold">{{ row.km_inicial }}</td>
+                            <td>{{ row.total_estacas }}</td>
+                            
+                            <td>{{ row.qtd_trincas }}</td>
+                            <td>{{ "%.1f"|format(row.pct_trincas) }}%</td>
+                            <td>{{ row.freq_trincas }} ({{ row.grav_trincas }})</td>
+
+                            <td>{{ row.qtd_deformacoes }}</td>
+                            <td>{{ "%.1f"|format(row.pct_deformacoes) }}%</td>
+                            <td>{{ row.freq_deformacoes }} ({{ row.grav_deformacoes }})</td>
+
+                            <td>{{ row.qtd_panelas }}</td>
+                            <td>{{ row.freq_panelas }} ({{ row.grav_panelas }})</td>
+
+                            <td class="text-start font-monospace small">
+                                (0.35 x {{ row.grav_trincas }}) + <br>
+                                (0.60 x {{ row.grav_deformacoes }}) + <br>
+                                (0.70 x {{ row.grav_panelas }}) <br>
+                                x 100 = <b>{{ "%.0f"|format(row.igge) }}</b>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer text-muted small">
+            Nota: 
+            Trincas/Deform (Alta >= 15%, Média > 5%). 
+            Panelas (Alta >= 5 ocorr., Média >= 2 ocorr.).
+            Fatores de Gravidade variam conforme Tabela 4 da Norma.
+        </div>
+    </div>
+</div>
+
+<script>
+    const chartData = {{ chart_data | tojson }};
+    const ctx = document.getElementById('iggeChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: chartData,
+        options: {
+            responsive: true,
+            scales: { y: { beginAtZero: true, suggestedMax: 160 } }
+        }
+    });
+</script>
 </body>
 </html>
