@@ -3,6 +3,7 @@ import sqlite3
 import uuid
 import os
 import numpy as np
+import glob
 from flask import Flask, render_template, request, redirect, url_for, session, g
 from werkzeug.utils import secure_filename
 
@@ -11,10 +12,27 @@ app.config['SECRET_KEY'] = 'chave_segura_projeto_igg_memoria'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['ALLOWED_EXTENSIONS'] = {'xlsx', 'xls'}
 
-if not os.path.exists(app.config['UPLOAD_FOLDER']):
-    os.makedirs(app.config['UPLOAD_FOLDER'])
-
 DATABASE = 'projeto.db'
+
+def limpar_uploads_ao_iniciar():
+    pasta = app.config['UPLOAD_FOLDER']
+    
+    if not os.path.exists(pasta):
+        os.makedirs(pasta)
+        print(f"Pasta '{pasta}' criada.")
+        return
+
+    arquivos = glob.glob(os.path.join(pasta, '*'))
+    print(f"Iniciando limpeza. Encontrados {len(arquivos)} arquivos antigos...")
+    
+    for arquivo in arquivos:
+        try:
+            os.remove(arquivo) 
+            print(f"Deletado: {arquivo}")
+        except Exception as e:
+            print(f"Erro ao deletar {arquivo}: {e}")
+
+limpar_uploads_ao_iniciar()
 
 # MAPA DE COLUNAS (Obrigatório seguir ordem da planilha)
 MAPA_COLUNAS = {
