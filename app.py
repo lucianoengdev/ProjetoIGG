@@ -2,44 +2,40 @@ import pandas as pd
 import sqlite3
 import uuid
 import os
-import numpy as np
 import glob
+import numpy as np
 from flask import Flask, render_template, request, redirect, url_for, session, g
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'chave_segura_projeto_igg_memoria'
+app.config['SECRET_KEY'] = 'chave_segura_projeto_igg_binario'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['ALLOWED_EXTENSIONS'] = {'xlsx', 'xls'}
 
 DATABASE = 'projeto.db'
 
+MAPA_COLUNAS = {
+    'km': 0, 
+    'g1_le': 1, 'g1_ld': 2, 'g2_le': 3, 'g2_ld': 4,
+    
+    'g3_le': 5, 'g3_ld': 6, 
+    'g4_le': 7, 'g4_ld': 8, 
+    
+    'g5_le': 9, 'g5_ld': 10,
+    'g6_le': 11, 'g6_ld': 12
+}
+
 def limpar_uploads_ao_iniciar():
     pasta = app.config['UPLOAD_FOLDER']
-    
     if not os.path.exists(pasta):
         os.makedirs(pasta)
-        print(f"Pasta '{pasta}' criada.")
         return
-
     arquivos = glob.glob(os.path.join(pasta, '*'))
-    print(f"Iniciando limpeza. Encontrados {len(arquivos)} arquivos antigos...")
-    
     for arquivo in arquivos:
-        try:
-            os.remove(arquivo) 
-            print(f"Deletado: {arquivo}")
-        except Exception as e:
-            print(f"Erro ao deletar {arquivo}: {e}")
+        try: os.remove(arquivo)
+        except: pass
 
 limpar_uploads_ao_iniciar()
-
-# MAPA DE COLUNAS (Obrigatório seguir ordem da planilha)
-MAPA_COLUNAS = {
-    'km': 0, 'area_g1_le': 1, 'area_g1_ld': 2, 'area_g2_le': 3, 'area_g2_ld': 4,
-    'area_g3_le': 5, 'area_g3_ld': 6, 'area_g4_le': 7, 'area_g4_ld': 8,
-    'area_g5_le': 9, 'area_g5_ld': 10, 'area_g6_le': 11, 'area_g6_ld': 12
-}
 
 def get_db():
     db = getattr(g, '_database', None)
@@ -56,8 +52,12 @@ def close_connection(exception):
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
-# --- CONSTANTES ---
-PESOS = {'Trincas': 0.35, 'Deformacoes': 0.60, 'Panelas': 0.70}
+PESOS = {
+    'Trincas': 0.35,      
+    'Deformacoes': 0.60,  
+    'Panelas': 0.70       
+}
+
 FATORES_GRAV = {
     'Trincas': {'A': 0.65, 'M': 0.45, 'B': 0.30},
     'Deformacoes': {'A': 1.00, 'M': 0.70, 'B': 0.60},
@@ -75,85 +75,94 @@ def calcular_igge_pro008(df, upload_id):
     db = get_db()
     cursor = db.cursor()
 
-    # 1. Tratamento e Inserção de Brutos (igual anterior)
-    df_insert = pd.DataFrame()
+    # 1. LEITURA E CONVERSÃO BINÁRIA
+    df_proc = pd.DataFrame()
+    
     idx_km = MAPA_COLUNAS['km']
-    df_insert['km'] = df.iloc[:, idx_km].apply(normalizar_para_float)
+    df_proc['km'] = df.iloc[:, idx_km].apply(normalizar_para_float)
+    df_proc['km_segmento'] = df_proc['km'].apply(lambda x: int(x))
+    for nome_col, idx in MAPA_COLUNAS.items():
+        if nome_col == 'km': continue
+        
+        if idx < df.shape[1]:
+            serie_original = df.iloc[:, idx].apply(normalizar_para_float)
+            df_proc[nome_col] = (serie_original > 0).astype(int)
+        else:
+            df_proc[nome_col] = 0
+
+    # 2. AGRUPAMENTO POR KM (SEGMENTO)
     
-    for nome, idx in MAPA_COLUNAS.items():
-        if nome != 'km':
-            if idx < df.shape[1]:
-                df_insert[nome] = df.iloc[:, idx].apply(normalizar_para_float)
-            else:
-                df_insert[nome] = 0.0
+    df_resumo = df_proc.groupby('km_segmento').apply(lambda x: pd.Series({
+        'total_estacas': len(x),
+        
+        # --- CÁLCULO TRINCAS (% EXTENSÃO) ---
+        'estacas_com_trinca': ((x['g1_le'] | x['g1_ld'] | x['g2_le'] | x['g2_ld']) > 0).sum(),
+        
+        # --- CÁLCULO DEFORMAÇÕES (% EXTENSÃO) ---
+        'estacas_com_deform': ((x['g5_le'] | x['g5_ld'] | x['g6_le'] | x['g6_ld']) > 0).sum(),
+        
+        # --- CÁLCULO PANELAS + REMENDOS (QUANTIDADE ABSOLUTA) ---
+        'qtd_total_panelas_remendos': (x['g3_le'] + x['g3_ld'] + x['g4_le'] + x['g4_ld']).sum()
+        
+    })).reset_index()
 
-    # Inserção de dados brutos para histórico
-    cols = list(MAPA_COLUNAS.keys())
-    placeholders = ', '.join(['?' for _ in cols])
-    try:
-        cursor.executemany(f"INSERT INTO estacas ({', '.join(cols)}) VALUES ({placeholders})", 
-                           df_insert[cols].values.tolist())
-    except Exception as e:
-        print(f"Erro inserção brutos: {e}")
-
-    # 2. CÁLCULO E MEMÓRIA
-    df_calc = df_insert.copy()
-    df_calc['km_segmento'] = df_calc['km'].apply(lambda x: int(x))
-
-    # Agrupamento com contagem detalhada
-    df_seg = df_calc.groupby('km_segmento').agg(
-        total_estacas=('km', 'count'),
-        # Soma quantas estacas tiveram defeito (> 0)
-        qtd_trincas=('area_g1_le', lambda x: ((x > 0) | (df_calc.loc[x.index, 'area_g2_le'] > 0) | (df_calc.loc[x.index, 'area_g1_ld'] > 0) | (df_calc.loc[x.index, 'area_g2_ld'] > 0)).sum()),
-        qtd_deform=('area_g5_le', lambda x: ((x > 0) | (df_calc.loc[x.index, 'area_g6_le'] > 0) | (df_calc.loc[x.index, 'area_g5_ld'] > 0) | (df_calc.loc[x.index, 'area_g6_ld'] > 0)).sum()),
-        qtd_panelas=('area_g3_le', lambda x: ((x > 0) | (df_calc.loc[x.index, 'area_g4_le'] > 0) | (df_calc.loc[x.index, 'area_g3_ld'] > 0) | (df_calc.loc[x.index, 'area_g4_ld'] > 0)).sum())
-    ).reset_index()
-
-    # 3. Cálculos de Porcentagem e Frequência
-    # Trincas e Deformações (Baseado em % de Extensão)
-    df_seg['pct_trincas'] = (df_seg['qtd_trincas'] / df_seg['total_estacas']) * 100
-    df_seg['freq_trincas'] = df_seg['pct_trincas'].apply(lambda x: 'A' if x >= 15 else ('M' if x > 5 else 'B'))
-
-    df_seg['pct_deform'] = (df_seg['qtd_deform'] / df_seg['total_estacas']) * 100
-    df_seg['freq_deform'] = df_seg['pct_deform'].apply(lambda x: 'A' if x >= 15 else ('M' if x > 5 else 'B'))
-
-    # Panelas (Baseado em Ocorrências absolutas por km)
-    df_seg['freq_panelas'] = df_seg['qtd_panelas'].apply(lambda x: 'A' if x >= 5 else ('M' if x >= 2 else 'B'))
-
-    # 4. Fatores e IGGE
-    df_seg['ft'] = df_seg['freq_trincas'].map(FATORES_GRAV['Trincas'])
-    df_seg['fd'] = df_seg['freq_deform'].map(FATORES_GRAV['Deformacoes'])
-    df_seg['fp'] = df_seg['freq_panelas'].map(FATORES_GRAV['Panelas'])
-
-    # FÓRMULA FINAL PRO-008
-    df_seg['igge'] = ((PESOS['Trincas'] * df_seg['ft']) + 
-                      (PESOS['Deformacoes'] * df_seg['fd']) + 
-                      (PESOS['Panelas'] * df_seg['fp'])) * 100
+    # 3. CÁLCULO DAS FREQUÊNCIAS E IGGE
     
-    df_seg['igge'] = df_seg['igge'].clip(upper=500)
+    # TRINCAS: Baseado em % da extensão do km afetada
+    df_resumo['pct_trincas'] = (df_resumo['estacas_com_trinca'] / df_resumo['total_estacas']) * 100
+    df_resumo['freq_trincas'] = df_resumo['pct_trincas'].apply(
+        lambda p: 'A' if p >= 15 else ('M' if p > 5 else 'B')
+    )
+    
+    # DEFORMAÇÕES: Baseado em % da extensão
+    df_resumo['pct_deform'] = (df_resumo['estacas_com_deform'] / df_resumo['total_estacas']) * 100
+    df_resumo['freq_deform'] = df_resumo['pct_deform'].apply(
+        lambda p: 'A' if p >= 15 else ('M' if p > 5 else 'B')
+    )
+    
+    # PANELAS + REMENDOS: Baseado na Quantidade por km (Soma absoluta)
+    df_resumo['freq_panelas'] = df_resumo['qtd_total_panelas_remendos'].apply(
+        lambda q: 'A' if q >= 5 else ('M' if q >= 2 else 'B')
+    )
 
-    # Conceito e IES
-    def get_conceito(v):
+    # 4. APLICAÇÃO DOS PESOS E FÓRMULA FINAL
+    df_resumo['ft'] = df_resumo['freq_trincas'].map(FATORES_GRAV['Trincas'])
+    df_resumo['fd'] = df_resumo['freq_deform'].map(FATORES_GRAV['Deformacoes'])
+    df_resumo['fp'] = df_resumo['freq_panelas'].map(FATORES_GRAV['Panelas'])
+
+    # IGGE = (Pt*Ft + Poap*Fd + Ppr*Fp) * 100
+    df_resumo['igge'] = (
+        (PESOS['Trincas'] * df_resumo['ft']) +
+        (PESOS['Deformacoes'] * df_resumo['fd']) +
+        (PESOS['Panelas'] * df_resumo['fp'])
+    ) * 100
+    
+    df_resumo['igge'] = df_resumo['igge'].clip(upper=500)
+
+    def classificar(v):
         if v <= 65: return 'Ótimo'
         if v <= 110: return 'Bom'
         if v <= 160: return 'Regular'
         if v <= 230: return 'Ruim'
         return 'Péssimo'
-    
-    df_seg['conceito'] = df_seg['igge'].apply(get_conceito)
-    df_seg['ies'] = (10 - (df_seg['igge'] * 10 / 500)).clip(lower=0)
 
-    # 5. Salvar TUDO no banco (incluindo memória)
+    df_resumo['conceito'] = df_resumo['igge'].apply(classificar)
+    df_resumo['ies'] = (10 - (df_resumo['igge'] * 10 / 500)).clip(lower=0)
+
+    # 5. SALVAR NO BANCO
     cursor.execute("DELETE FROM resultados_pro008 WHERE upload_id = ?", (upload_id,))
     
-    dados = []
-    for _, row in df_seg.iterrows():
-        dados.append((
+    dados_insert = []
+    for _, row in df_resumo.iterrows():
+        dados_insert.append((
             upload_id, row['km_segmento'], row['km_segmento']+1,
             int(row['total_estacas']),
-            int(row['qtd_trincas']), row['pct_trincas'],
-            int(row['qtd_deform']), row['pct_deform'],
-            int(row['qtd_panelas']),
+            
+            int(row['estacas_com_trinca']), row['pct_trincas'],
+            int(row['estacas_com_deform']), row['pct_deform'],
+            
+            int(row['qtd_total_panelas_remendos']), 
+            
             row['freq_trincas'], row['freq_deform'], row['freq_panelas'],
             row['ft'], row['fd'], row['fp'],
             row['igge'], row['ies'], row['conceito']
@@ -167,10 +176,9 @@ def calcular_igge_pro008(df, upload_id):
               igge, ies, conceito)
              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
     
-    cursor.executemany(sql, dados)
+    cursor.executemany(sql, dados_insert)
     db.commit()
 
-# ROTAS (Index igual, Relatório atualizado na próxima etapa)
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
@@ -185,9 +193,7 @@ def index():
             file.save(filepath)
             uid = str(uuid.uuid4())
             session['upload_id'] = uid
-            
             try:
-                # header=None, skiprows=linha-1
                 df = pd.read_excel(filepath, header=None, skiprows=linha_inicial-1, dtype=object)
                 calcular_igge_pro008(df, uid)
                 return redirect(url_for('relatorio', id=uid))
@@ -203,7 +209,7 @@ def relatorio(id):
     chart_data = {
         'labels': [f"{r['km_inicial']}-{r['km_final']}" for r in res],
         'datasets': [{'label': 'IGGE', 'data': [r['igge'] for r in res], 
-                      'backgroundColor': '#ffcc00'}] # Cor simplificada
+                      'backgroundColor': '#0d6efd'}]
     }
     return render_template('relatorio.html', resultados=res, chart_data=chart_data)
 
