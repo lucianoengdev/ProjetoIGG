@@ -3,27 +3,27 @@ import sqlite3
 import uuid
 import os
 import glob
+import io
 import numpy as np
-# Importamos send_from_directory para enviar seu arquivo físico
 from flask import Flask, render_template, request, redirect, url_for, session, g, send_from_directory
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'chave_segura_projeto_igg_static'
+app.config['SECRET_KEY'] = 'chave_segura_projeto_igg_final'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['ALLOWED_EXTENSIONS'] = {'xlsx', 'xls'}
 
 DATABASE = 'projeto.db'
 
-# --- 1. CONFIGURAÇÃO DE COLUNAS ---
-MAPA_COLUNAS = {
-    'km': 0, 
-    'g1_le': 1, 'g1_ld': 2, 'g2_le': 3, 'g2_ld': 4,
-    'g3_le': 5, 'g3_ld': 6, 'g4_le': 7, 'g4_ld': 8, 
-    'g5_le': 9, 'g5_ld': 10, 'g6_le': 11, 'g6_ld': 12
+INDICES = {
+    'km': 0,
+    'trincas': [2, 3, 4, 5, 6, 7, 8, 9, 25, 26, 27, 28, 29, 30, 31, 32],
+    
+    'deformacoes': [12, 13, 14, 15, 35, 36, 37, 38],
+    
+    'panelas_remendos': [17, 40, 21, 44]
 }
 
-# --- FAXINA INICIAL ---
 def limpar_uploads_ao_iniciar():
     pasta = app.config['UPLOAD_FOLDER']
     if not os.path.exists(pasta):
@@ -51,7 +51,6 @@ def close_connection(exception):
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
-# --- CONSTANTES ---
 PESOS = {'Trincas': 0.35, 'Deformacoes': 0.60, 'Panelas': 0.70}
 FATORES_GRAV = {
     'Trincas': {'A': 0.65, 'M': 0.45, 'B': 0.30},
@@ -66,31 +65,59 @@ def normalizar_para_float(valor):
     try: return float(valor_str)
     except ValueError: return 0.0
 
-# --- MOTOR DE CÁLCULO ---
 def calcular_igge_pro008(df, upload_id):
     db = get_db()
     cursor = db.cursor()
 
+    # 1. PROCESSAMENTO DE KM
     df_proc = pd.DataFrame()
-    idx_km = MAPA_COLUNAS['km']
-    df_proc['km'] = df.iloc[:, idx_km].apply(normalizar_para_float)
-    df_proc['km_segmento'] = df_proc['km'].apply(lambda x: int(x))
+    max_col = df.shape[1]
+    
+    idx_km = INDICES['km']
+    if idx_km < max_col:
+        df_proc['km'] = df.iloc[:, idx_km].apply(normalizar_para_float)
+        df_proc['km_segmento'] = df_proc['km'].apply(lambda x: int(x))
+    else:
+        raise ValueError("A planilha não tem a coluna 0 (KM).")
 
-    for nome_col, idx in MAPA_COLUNAS.items():
-        if nome_col == 'km': continue
-        if idx < df.shape[1]:
-            serie_original = df.iloc[:, idx].apply(normalizar_para_float)
-            df_proc[nome_col] = (serie_original > 0).astype(int)
-        else:
-            df_proc[nome_col] = 0
+    # 2. PROCESSAMENTO DAS COLUNAS DE DEFEITOS (BINARIZAÇÃO)
+    def checar_grupo(row_idx, lista_indices):
+        valores = []
+        for col_idx in lista_indices:
+            if col_idx < max_col:
+                val = normalizar_para_float(df.iloc[row_idx, col_idx])
+                valores.append(1 if val > 0 else 0)
+            else:
+                valores.append(0)
+        return valores
+    
+    flags_trinca = []
+    flags_deform = []
+    soma_panelas = []
 
+    for i in range(len(df)):
+        vals_trinca = checar_grupo(i, INDICES['trincas'])
+        flags_trinca.append(1 if sum(vals_trinca) > 0 else 0)
+        
+        vals_deform = checar_grupo(i, INDICES['deformacoes'])
+        flags_deform.append(1 if sum(vals_deform) > 0 else 0)
+        
+        vals_panela = checar_grupo(i, INDICES['panelas_remendos'])
+        soma_panelas.append(sum(vals_panela))
+
+    df_proc['tem_trinca'] = flags_trinca
+    df_proc['tem_deform'] = flags_deform
+    df_proc['qtd_panelas'] = soma_panelas
+
+    # 3. AGRUPAMENTO POR SEGMENTO
     df_resumo = df_proc.groupby('km_segmento').apply(lambda x: pd.Series({
         'total_estacas': len(x),
-        'estacas_com_trinca': ((x['g1_le'] | x['g1_ld'] | x['g2_le'] | x['g2_ld']) > 0).sum(),
-        'estacas_com_deform': ((x['g5_le'] | x['g5_ld'] | x['g6_le'] | x['g6_ld']) > 0).sum(),
-        'qtd_total_panelas_remendos': (x['g3_le'] + x['g3_ld'] + x['g4_le'] + x['g4_ld']).sum()
+        'estacas_com_trinca': x['tem_trinca'].sum(),
+        'estacas_com_deform': x['tem_deform'].sum(),
+        'qtd_total_panelas_remendos': x['qtd_panelas'].sum()
     })).reset_index()
 
+    # 4. FREQUÊNCIAS E IGGE
     df_resumo['pct_trincas'] = (df_resumo['estacas_com_trinca'] / df_resumo['total_estacas']) * 100
     df_resumo['freq_trincas'] = df_resumo['pct_trincas'].apply(lambda p: 'A' if p >= 15 else ('M' if p > 5 else 'B'))
     
@@ -116,6 +143,7 @@ def calcular_igge_pro008(df, upload_id):
     df_resumo['conceito'] = df_resumo['igge'].apply(classificar)
     df_resumo['ies'] = (10 - (df_resumo['igge'] * 10 / 500)).clip(lower=0)
 
+    # 5. SALVAR
     cursor.execute("DELETE FROM resultados_pro008 WHERE upload_id = ?", (upload_id,))
     
     dados_insert = []
@@ -174,11 +202,8 @@ def relatorio(id):
     }
     return render_template('relatorio.html', resultados=res, chart_data=chart_data)
 
-# --- NOVA ROTA CORRIGIDA: SERVE O SEU ARQUIVO DA PASTA STATIC ---
 @app.route('/download_modelo')
 def download_modelo():
-    # Caminho onde o arquivo DEVE estar: pasta 'static' na raiz do projeto
-    # O arquivo DEVE se chamar 'modelo_padrao.xlsx'
     try:
         return send_from_directory(
             directory='static', 
@@ -186,7 +211,7 @@ def download_modelo():
             as_attachment=True
         )
     except FileNotFoundError:
-        return "ERRO: Você esqueceu de colocar o arquivo 'modelo_padrao.xlsx' na pasta 'static'!"
+        return "ERRO: Arquivo 'modelo_padrao.xlsx' não encontrado na pasta 'static'."
 
 if __name__ == '__main__':
     app.run(debug=True)
