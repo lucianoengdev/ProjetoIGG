@@ -15,13 +15,23 @@ app.config['ALLOWED_EXTENSIONS'] = {'xlsx', 'xls'}
 
 DATABASE = 'projeto.db'
 
+LARGURA_FAIXA = 3.5       
+COMPRIMENTO_ESTACA = 20.0 
+AREA_ESTACA = LARGURA_FAIXA * COMPRIMENTO_ESTACA # 70.0 m² (A_i)
+
 INDICES = {
     'km': 0,
     'trincas': [2, 3, 4, 5, 6, 7, 8, 9, 25, 26, 27, 28, 29, 30, 31, 32],
-    
     'deformacoes': [12, 13, 14, 15, 35, 36, 37, 38],
-    
     'panelas_remendos': [17, 40, 21, 44]
+}
+
+PESOS = {'Trincas': 0.35, 'Deformacoes': 0.60, 'Panelas': 0.70}
+
+FATORES_GRAV = {
+    'Trincas': {'A': 0.65, 'M': 0.45, 'B': 0.30},
+    'Deformacoes': {'A': 1.00, 'M': 0.70, 'B': 0.60},
+    'Panelas': {'A': 1.00, 'M': 0.80, 'B': 0.70}
 }
 
 def limpar_uploads_ao_iniciar():
@@ -51,13 +61,6 @@ def close_connection(exception):
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
-PESOS = {'Trincas': 0.35, 'Deformacoes': 0.60, 'Panelas': 0.70}
-FATORES_GRAV = {
-    'Trincas': {'A': 0.65, 'M': 0.45, 'B': 0.30},
-    'Deformacoes': {'A': 1.00, 'M': 0.70, 'B': 0.60},
-    'Panelas': {'A': 1.00, 'M': 0.80, 'B': 0.70}
-}
-
 def normalizar_para_float(valor):
     if pd.isna(valor) or valor == '': return 0.0
     if isinstance(valor, (int, float)): return float(valor)
@@ -69,7 +72,7 @@ def calcular_igge_pro008(df, upload_id):
     db = get_db()
     cursor = db.cursor()
 
-    # 1. PROCESSAMENTO DE KM
+    # 1. PROCESSAMENTO INICIAL
     df_proc = pd.DataFrame()
     max_col = df.shape[1]
     
@@ -80,59 +83,72 @@ def calcular_igge_pro008(df, upload_id):
     else:
         raise ValueError("A planilha não tem a coluna 0 (KM).")
 
-    # 2. PROCESSAMENTO DAS COLUNAS DE DEFEITOS (BINARIZAÇÃO)
-    def checar_grupo(row_idx, lista_indices):
-        valores = []
+    def processar_grupo(row_idx, lista_indices, modo='soma_real'):
+        soma = 0.0
         for col_idx in lista_indices:
             if col_idx < max_col:
                 val = normalizar_para_float(df.iloc[row_idx, col_idx])
-                valores.append(1 if val > 0 else 0)
-            else:
-                valores.append(0)
-        return valores
-    
-    flags_trinca = []
-    flags_deform = []
-    soma_panelas = []
+                if modo == 'soma_real':
+                    soma += val
+                elif modo == 'binario':
+                    soma += 1 if val > 0 else 0
+        return soma
+
+    areas_trinca = []
+    areas_deform = []
+    qtds_panela = []
 
     for i in range(len(df)):
-        vals_trinca = checar_grupo(i, INDICES['trincas'])
-        flags_trinca.append(1 if sum(vals_trinca) > 0 else 0)
+        areas_trinca.append(processar_grupo(i, INDICES['trincas'], modo='soma_real'))
         
-        vals_deform = checar_grupo(i, INDICES['deformacoes'])
-        flags_deform.append(1 if sum(vals_deform) > 0 else 0)
+        areas_deform.append(processar_grupo(i, INDICES['deformacoes'], modo='soma_real'))
         
-        vals_panela = checar_grupo(i, INDICES['panelas_remendos'])
-        soma_panelas.append(sum(vals_panela))
+        qtds_panela.append(processar_grupo(i, INDICES['panelas_remendos'], modo='binario'))
 
-    df_proc['tem_trinca'] = flags_trinca
-    df_proc['tem_deform'] = flags_deform
-    df_proc['qtd_panelas'] = soma_panelas
+    df_proc['area_trinca'] = areas_trinca
+    df_proc['area_deform'] = areas_deform
+    df_proc['qtd_panelas'] = qtds_panela
 
-    # 3. AGRUPAMENTO POR SEGMENTO
+    # 2. AGRUPAMENTO POR SEGMENTO (LÓGICA HÍBRIDA)
     df_resumo = df_proc.groupby('km_segmento').apply(lambda x: pd.Series({
         'total_estacas': len(x),
-        'estacas_com_trinca': x['tem_trinca'].sum(),
-        'estacas_com_deform': x['tem_deform'].sum(),
+        'area_total_segmento': len(x) * AREA_ESTACA, 
+        
+        'soma_area_trinca': x['area_trinca'].sum(),
+        'soma_area_deform': x['area_deform'].sum(),
+        
         'qtd_total_panelas_remendos': x['qtd_panelas'].sum()
     })).reset_index()
 
-    # 4. FREQUÊNCIAS E IGGE
-    df_resumo['pct_trincas'] = (df_resumo['estacas_com_trinca'] / df_resumo['total_estacas']) * 100
-    df_resumo['freq_trincas'] = df_resumo['pct_trincas'].apply(lambda p: 'A' if p >= 15 else ('M' if p > 5 else 'B'))
+    # 3. CÁLCULO DAS FREQUÊNCIAS (% e Quantidade)
     
-    df_resumo['pct_deform'] = (df_resumo['estacas_com_deform'] / df_resumo['total_estacas']) * 100
-    df_resumo['freq_deform'] = df_resumo['pct_deform'].apply(lambda p: 'A' if p >= 15 else ('M' if p > 5 else 'B'))
     
-    df_resumo['freq_panelas'] = df_resumo['qtd_total_panelas_remendos'].apply(lambda q: 'A' if q >= 5 else ('M' if q >= 2 else 'B'))
+    df_resumo['pct_trincas'] = (df_resumo['soma_area_trinca'] / df_resumo['area_total_segmento']) * 100
+    df_resumo['freq_trincas'] = df_resumo['pct_trincas'].apply(
+        lambda p: 'A' if p > 50 else ('M' if p > 10 else 'B')
+    )
+    
+    df_resumo['pct_deform'] = (df_resumo['soma_area_deform'] / df_resumo['area_total_segmento']) * 100
+    df_resumo['freq_deform'] = df_resumo['pct_deform'].apply(
+        lambda p: 'A' if p > 50 else ('M' if p > 10 else 'B')
+    )
+    
+    df_resumo['freq_panelas'] = df_resumo['qtd_total_panelas_remendos'].apply(
+        lambda q: 'A' if q >= 5 else ('M' if q > 2 else 'B')
+    )
 
+    # 4. FATORES E IGGE
     df_resumo['ft'] = df_resumo['freq_trincas'].map(FATORES_GRAV['Trincas'])
     df_resumo['fd'] = df_resumo['freq_deform'].map(FATORES_GRAV['Deformacoes'])
     df_resumo['fp'] = df_resumo['freq_panelas'].map(FATORES_GRAV['Panelas'])
 
-    df_resumo['igge'] = ((PESOS['Trincas'] * df_resumo['ft']) + (PESOS['Deformacoes'] * df_resumo['fd']) + (PESOS['Panelas'] * df_resumo['fp'])) * 100
+    df_resumo['igge'] = ((PESOS['Trincas'] * df_resumo['ft']) + 
+                         (PESOS['Deformacoes'] * df_resumo['fd']) + 
+                         (PESOS['Panelas'] * df_resumo['fp'])) * 100
+    
     df_resumo['igge'] = df_resumo['igge'].clip(upper=500)
 
+    # 5. CONCEITO E IES
     def classificar(v):
         if v <= 65: return 'Ótimo'
         if v <= 110: return 'Bom'
@@ -143,7 +159,7 @@ def calcular_igge_pro008(df, upload_id):
     df_resumo['conceito'] = df_resumo['igge'].apply(classificar)
     df_resumo['ies'] = (10 - (df_resumo['igge'] * 10 / 500)).clip(lower=0)
 
-    # 5. SALVAR
+    # 6. SALVAR NO BANCO
     cursor.execute("DELETE FROM resultados_pro008 WHERE upload_id = ?", (upload_id,))
     
     dados_insert = []
@@ -151,9 +167,12 @@ def calcular_igge_pro008(df, upload_id):
         dados_insert.append((
             upload_id, row['km_segmento'], row['km_segmento']+1,
             int(row['total_estacas']),
-            int(row['estacas_com_trinca']), row['pct_trincas'],
-            int(row['estacas_com_deform']), row['pct_deform'],
+            
+            round(row['soma_area_trinca'], 2), row['pct_trincas'],
+            round(row['soma_area_deform'], 2), row['pct_deform'],
+            
             int(row['qtd_total_panelas_remendos']),
+            
             row['freq_trincas'], row['freq_deform'], row['freq_panelas'],
             row['ft'], row['fd'], row['fp'],
             row['igge'], row['ies'], row['conceito']
@@ -169,7 +188,7 @@ def calcular_igge_pro008(df, upload_id):
     cursor.executemany(sql, dados_insert)
     db.commit()
 
-# --- ROTAS ---
+# --- ROTAS FLASK ---
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
@@ -205,11 +224,7 @@ def relatorio(id):
 @app.route('/download_modelo')
 def download_modelo():
     try:
-        return send_from_directory(
-            directory='static', 
-            path='modelo_padrao.xlsx', 
-            as_attachment=True
-        )
+        return send_from_directory(directory='static', path='modelo_padrao.xlsx', as_attachment=True)
     except FileNotFoundError:
         return "ERRO: Arquivo 'modelo_padrao.xlsx' não encontrado na pasta 'static'."
 
