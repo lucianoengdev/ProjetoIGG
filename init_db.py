@@ -56,6 +56,7 @@ CREATE TABLE resultados_pro008 (
 );
 ''')
 
+
 conn.commit()
 conn.close()
 
