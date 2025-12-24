@@ -46,13 +46,13 @@ app.config['ALLOWED_EXTENSIONS'] = {'xlsx', 'xls'}
 
 DATABASE = 'projeto.db'
 
-LARGURA_FAIXA = 3.5       
+LARGURA_FAIXA = 7       # 2 Faixas (LD + LE)
 COMPRIMENTO_ESTACA = 20.0 
-AREA_ESTACA = LARGURA_FAIXA * COMPRIMENTO_ESTACA # 70.0 m² (A_i)
+AREA_ESTACA = LARGURA_FAIXA * COMPRIMENTO_ESTACA # 140.0 m² (A_i)
 
 INDICES = {
     'km': 0,
-    'trincas': [2, 3, 4, 5, 6, 7, 8, 9, 25, 26, 27, 28, 29, 30, 31, 32],
+    'trincas': [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34],
     'deformacoes': [12, 13, 14, 15, 16, 35, 36, 37, 38, 39],
     'panelas_remendos': [17, 40, 21, 44]
 }
@@ -271,8 +271,41 @@ def relatorio(id):
     db = get_db()
     res = db.execute("SELECT * FROM resultados_pro008 WHERE upload_id = ? ORDER BY km_inicial", (id,)).fetchall()
     chart_data = {
-        'labels': [f"{r['km_inicial']}-{r['km_final']}" for r in res],
-        'datasets': [{'label': 'IGGE', 'data': [r['igge'] for r in res], 'backgroundColor': '#0d6efd'}]
+        'labels': [f"km {r['km_inicial']}" for r in res],
+        'datasets': [
+            {
+                'label': 'IGGE (Gravidade Global)',
+                'data': [r['igge'] for r in res],
+                'backgroundColor': 'rgba(13, 110, 253, 0.5)',
+                'borderColor': 'rgba(13, 110, 253, 1)',
+                'borderWidth': 1,
+                'type': 'bar', # IGGE fica melhor como Barra
+                'yAxisID': 'y', # Eixo Esquerdo (0-500)
+                'order': 2
+            },
+            {
+                'label': 'IES (Estado da Superfície)',
+                'data': [r['ies'] for r in res],
+                'backgroundColor': 'rgba(255, 193, 7, 1)', # Amarelo Ouro
+                'borderColor': 'rgba(255, 193, 7, 1)',
+                'borderWidth': 3,
+                'type': 'line', # IES como Linha para destacar
+                'tension': 0.3, # Suavização da linha
+                'yAxisID': 'y1', # Eixo Direito (0-10)
+                'order': 1
+            },
+            {
+                'label': 'ICPF (Condição Estimada)',
+                'data': [r['icpf'] for r in res],
+                'backgroundColor': 'rgba(25, 135, 84, 1)', # Verde
+                'borderColor': 'rgba(25, 135, 84, 1)',
+                'borderWidth': 3,
+                'type': 'line',
+                'tension': 0.3,
+                'yAxisID': 'y1', # Eixo Direito (0-10)
+                'order': 0
+            }
+        ]
     }
     return render_template('relatorio.html', resultados=res, chart_data=chart_data)
 
