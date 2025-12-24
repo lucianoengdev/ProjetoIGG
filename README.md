@@ -6,18 +6,25 @@ DNIT 008 Analyzer is a web-based engineering tool designed to automate the evalu
 The software processes raw field inventory data to calculate key indicators used in transport engineering for road maintenance planning:
 * IGGE (Índice de Gravidade Global Expedito - Expedited Global Gravity Index)
 * IES (Índice do Estado da Superfície - Surface Condition Index)
+* ICPF (Índice de Condição do Pavimento Flexível - Estimated Pavement Condition Index)
 
 ## ⚙️ What does it do?
 This application replaces manual calculation spreadsheets with an automated, database-driven process. Its core workflow includes:
 
 1.  Data Ingestion: Accepts Excel (`.xlsx`) spreadsheets containing raw defect inventory (Cracks, Deformations, Potholes/Patches) by station (20m).
-2.  Standard Compliance: Automatically converts raw data into Frequency (High, Medium, Low) and Gravity factors based on the DNIT 008 tables.
-3.  Segmentation: Aggregates data by kilometer segments.
-4.  Reporting: Generates a visual HTML report containing:
+2.  Hybrid Methodology (DNIT Adaptation):
+    * Cracks & Deformations: Calculates the Frequency (%D) using the **Area Ratio method** (Sum of Defect Areas / Total Segment Area) to estimate the percentage of extension affected, converting quantitative field data ($m^2$) into normative percentages.
+    * Potholes & Patches: Uses Absolute Counting (occurrences/km) as strictly required by Table 1 of the standard.
+3.  Standard Compliance: Automatically converts raw data into Frequency (High, Medium, Low) and applies Weight Factors ($P_t, P_{oap}, P_{pr}$) from DNIT 008 Table 4.
+4.  Segmentation: Aggregates data by kilometer segments.
+5.  Reporting: Generates a visual HTML report containing:
     * Bar charts showing the IGGE evolution along the road.
     * A Summary Table with the final Concept (Optimal, Good, Fair, Poor, Very Poor).
-    * Detailed Calculation Memory: A "traceability" table showing exactly how the algorithm reached the final numbers (counts, percentages, and factors applied).
-5.  Clean Slate Protocol: Automatically cleans old files upon startup to save server storage.
+    * Calculated Indices: Displays IGGE, IES (based on Table 5 Matrix), and estimated ICPF.
+    * Detailed Calculation Memory: A "traceability" table showing exactly how the algorithm reached the final numbers.
+    * (Planned): Display of Normative Reference Tables (DNIT Tables 1-5) within the report for quick consultation.
+6.  Template System: Provides a built-in downloadable Excel template (`modelo_padrao.xlsx`) to ensure correct data entry.
+7.  Clean Slate Protocol: Automatically cleans old files upon startup to save server storage.
 
 ## 🛠️ Technologies Used
 This project relies on a robust Python stack for data analysis and a lightweight web interface:
@@ -39,12 +46,11 @@ The software architecture, database structure, and web interface are fully imple
 ## ⚠️ Known Issues & Improvements (Read Carefully)
 While the software is functionally stable, the following points require attention before professional deployment:
 
-1.  Formula Verification (Critical):
-    * The core mathematical logic (`app.py`) implements the DNIT 008 standard rules. However, a rigorous manual cross-check of the results against a known control dataset has not yet been performed.
-    * Action Required: The user must validate the "Calculation Memory" table against a manually calculated spreadsheet to ensure 100% accuracy before using the outputs for official engineering reports.
+1.  Methodological Validation (Critical):
+    * The system uses an automated technical approximation to convert Area ($m^2$) into Extension (%). While mathematically sound for engineering estimates, the "Calculation Memory" must be cross-checked against a manual control dataset to validate the conversion factors (Assumed: Lane Width = 3.5m, Station = 20m).
 
 2.  Column Mapping:
-    * Currently, the system expects specific columns for defects (e.g., G1 to G8). Customizing column mapping requires editing the source code dictionary.
+    * The system uses a hardcoded index mapping (defined in the `INDICES` dictionary). Any changes to the Excel column order require updating the source code.
 
 ---
 
