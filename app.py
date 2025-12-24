@@ -8,6 +8,37 @@ import numpy as np
 from flask import Flask, render_template, request, redirect, url_for, session, g, send_from_directory
 from werkzeug.utils import secure_filename
 
+"""
+==================================================================================
+NOTA TÉCNICA E METODOLÓGICA (DNIT 008/2003 - PRO)
+==================================================================================
+
+1. APROXIMAÇÃO TÉCNICA AUTOMATIZADA (CÁLCULO POR ÁREA):
+   Este software implementa uma adaptação computacional do método de "Levantamento
+   Visual Contínuo". Enquanto a norma original baseia-se na avaliação visual da
+   % de extensão do segmento afetada, este algoritmo utiliza os dados quantitativos
+   de área (m²) presentes no inventário para calcular uma "Extensão Equivalente".
+   
+   Metodologia Adotada:
+   - Trincas e Deformações: O cálculo da frequência (%D) é realizado através da
+     razão entre a [Soma das Áreas Afetadas] e a [Área Total do Segmento].
+     Esta abordagem converte o dado de área em um indicador percentual compatível
+     com as tabelas de classificação da norma.
+   - Panelas e Remendos: Mantém-se a contagem absoluta de ocorrências (unidades/km),
+     estritamente conforme a Tabela 1 da norma.
+
+2. MAPEAMENTO DE COLUNAS E CONJUNTOS NORMATIVOS:
+   O dicionário de configuração de colunas ('INDICES') não representa campos
+   aleatórios, mas sim os agrupamentos de defeitos definidos no Anexo A da norma.
+   Independentemente da posição na planilha, os dados são agregados nos seguintes
+   conjuntos lógicos para cálculo do IGGE:
+   - Grupo Trincas (Pt): Fissuras, Trincas Isoladas, Jacaré (J/JE), Bloco (TB/TBE).
+   - Grupo Deformações (Poap): Afundamentos (ALP/ATP/ALC/ATC) e Ondulações.
+   - Grupo Panelas (Ppr): Soma de Panelas (P) e Remendos (R) Superficiais/Profundos.
+
+==================================================================================
+"""
+
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce'
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -22,7 +53,7 @@ AREA_ESTACA = LARGURA_FAIXA * COMPRIMENTO_ESTACA # 70.0 m² (A_i)
 INDICES = {
     'km': 0,
     'trincas': [2, 3, 4, 5, 6, 7, 8, 9, 25, 26, 27, 28, 29, 30, 31, 32],
-    'deformacoes': [12, 13, 14, 15, 35, 36, 37, 38],
+    'deformacoes': [12, 13, 14, 15, 16, 35, 36, 37, 38, 39],
     'panelas_remendos': [17, 40, 21, 44]
 }
 
@@ -118,19 +149,19 @@ def calcular_igge_pro008(df, upload_id):
         'soma_area_deform': x['area_deform'].sum(),
         
         'qtd_total_panelas_remendos': x['qtd_panelas'].sum()
-    })).reset_index()
+    }), include_groups=False).reset_index()
 
     # 3. CÁLCULO DAS FREQUÊNCIAS (% e Quantidade)
     
     
     df_resumo['pct_trincas'] = (df_resumo['soma_area_trinca'] / df_resumo['area_total_segmento']) * 100
     df_resumo['freq_trincas'] = df_resumo['pct_trincas'].apply(
-        lambda p: 'A' if p > 50 else ('M' if p > 10 else 'B')
+        lambda p: 'A' if p >= 50 else ('M' if p > 10 else 'B')
     )
     
     df_resumo['pct_deform'] = (df_resumo['soma_area_deform'] / df_resumo['area_total_segmento']) * 100
     df_resumo['freq_deform'] = df_resumo['pct_deform'].apply(
-        lambda p: 'A' if p > 50 else ('M' if p > 10 else 'B')
+        lambda p: 'A' if p >= 50 else ('M' if p > 10 else 'B')
     )
     
     df_resumo['freq_panelas'] = df_resumo['qtd_total_panelas_remendos'].apply(
@@ -138,26 +169,50 @@ def calcular_igge_pro008(df, upload_id):
     )
 
     # 4. FATORES E IGGE
-    df_resumo['ft'] = df_resumo['freq_trincas'].map(FATORES_GRAV['Trincas'])
-    df_resumo['fd'] = df_resumo['freq_deform'].map(FATORES_GRAV['Deformacoes'])
-    df_resumo['fp'] = df_resumo['freq_panelas'].map(FATORES_GRAV['Panelas'])
+    df_resumo['pt'] = df_resumo['freq_trincas'].map(FATORES_GRAV['Trincas'])
+    df_resumo['poap'] = df_resumo['freq_deform'].map(FATORES_GRAV['Deformacoes'])
+    df_resumo['ppr'] = df_resumo['freq_panelas'].map(FATORES_GRAV['Panelas'])
 
-    df_resumo['igge'] = ((PESOS['Trincas'] * df_resumo['ft']) + 
-                         (PESOS['Deformacoes'] * df_resumo['fd']) + 
-                         (PESOS['Panelas'] * df_resumo['fp'])) * 100
+    df_resumo['igge'] = (
+            (df_resumo['pt'] * df_resumo['pct_trincas']) + 
+            (df_resumo['poap'] * df_resumo['pct_deform']) + 
+            (df_resumo['ppr'] * df_resumo['qtd_total_panelas_remendos'])
+        )
     
-    df_resumo['igge'] = df_resumo['igge'].clip(upper=500)
+    def estimar_icpf(igge):
+        if igge <= 5: return 5
+        elif igge <= 15: return 4
+        elif igge <= 40: return 3
+        elif igge <= 70: return 2
+        else: return 1
+
+    df_resumo['icpf'] = df_resumo['igge'].apply(estimar_icpf)
 
     # 5. CONCEITO E IES
-    def classificar(v):
-        if v <= 65: return 'Ótimo'
-        if v <= 110: return 'Bom'
-        if v <= 160: return 'Regular'
-        if v <= 230: return 'Ruim'
-        return 'Péssimo'
+    def determinar_ies_conceito(row):
+        igge = row['igge']
+        icpf = row['icpf']
 
-    df_resumo['conceito'] = df_resumo['igge'].apply(classificar)
-    df_resumo['ies'] = (10 - (df_resumo['igge'] * 10 / 500)).clip(lower=0)
+        if igge <= 20:
+            if icpf > 3.5: return 0, 'Ótimo'   # Código A
+            else:          return 1, 'Bom'     # Código B
+            
+        elif igge <= 40: # 20 < IGGE <= 40
+            if icpf > 3.5: return 2, 'Bom'     # Código B 
+            else:          return 3, 'Regular' # Código C
+            
+        elif igge <= 60: # 40 < IGGE <= 60
+            if icpf > 2.5: return 4, 'Regular' # Código C
+            else:          return 5, 'Ruim'    # Código D
+            
+        elif igge <= 90: # 60 < IGGE <= 90
+            if icpf > 2.5: return 7, 'Ruim'    # Código D
+            else:          return 8, 'Péssimo' # Código E
+            
+        else: # IGGE > 90
+            return 10, 'Péssimo'               # Código E
+        
+    df_resumo[['ies', 'conceito']] = df_resumo.apply(determinar_ies_conceito, axis=1, result_type='expand')
 
     # 6. SALVAR NO BANCO
     cursor.execute("DELETE FROM resultados_pro008 WHERE upload_id = ?", (upload_id,))
@@ -174,17 +229,17 @@ def calcular_igge_pro008(df, upload_id):
             int(row['qtd_total_panelas_remendos']),
             
             row['freq_trincas'], row['freq_deform'], row['freq_panelas'],
-            row['ft'], row['fd'], row['fp'],
-            row['igge'], row['ies'], row['conceito']
+            row['pt'], row['poap'], row['ppr'],
+            row['igge'], row['icpf'], row['ies'], row['conceito']
         ))
 
     sql = """INSERT INTO resultados_pro008 
-             (upload_id, km_inicial, km_final, total_estacas, 
-              qtd_trincas, pct_trincas, qtd_deformacoes, pct_deformacoes, qtd_panelas,
-              freq_trincas, freq_deformacoes, freq_panelas,
-              grav_trincas, grav_deformacoes, grav_panelas,
-              igge, ies, conceito)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
+                (upload_id, km_inicial, km_final, total_estacas, 
+                qtd_trincas, pct_trincas, qtd_deformacoes, pct_deformacoes, qtd_panelas,
+                freq_trincas, freq_deformacoes, freq_panelas,
+                grav_trincas, grav_deformacoes, grav_panelas,
+                igge, icpf, ies, conceito)  -- Adicionado icpf aqui
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
     cursor.executemany(sql, dados_insert)
     db.commit()
 
