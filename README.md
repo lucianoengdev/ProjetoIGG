@@ -13,17 +13,15 @@ This application replaces manual calculation spreadsheets with an automated, dat
 
 1.  Data Ingestion: Accepts Excel (`.xlsx`) spreadsheets containing raw defect inventory (Cracks, Deformations, Potholes/Patches) by station (20m).
 2.  Hybrid Methodology (DNIT Adaptation):
-    * Cracks & Deformations: Calculates the Frequency (%D) using the **Area Ratio method** (Sum of Defect Areas / Total Segment Area) to estimate the percentage of extension affected, converting quantitative field data ($m^2$) into normative percentages.
-    * Potholes & Patches: Uses Absolute Counting (occurrences/km) as strictly required by Table 1 of the standard.
-3.  Standard Compliance: Automatically converts raw data into Frequency (High, Medium, Low) and applies Weight Factors ($P_t, P_{oap}, P_{pr}$) from DNIT 008 Table 4.
+    * Cracks & Deformations: Calculates the Frequency (%D) using the Area Ratio method. It sums the exact defect area ($m^2$) entered in the spreadsheet and divides it by the Total Segment Area (Assumed 7.0m width × 1000m), converting field measurements into the normative percentage.
+    * Potholes & Patches: Offers a User Selection feature at upload. The user can choose between Incidence Mode (Binary: considers if the defect exists or not per station) or Real Counting Mode (Sums the exact quantity of potholes), adapting to different survey styles.3.  Standard Compliance: Automatically converts raw data into Frequency (High, Medium, Low) and applies Weight Factors ($P_t, P_{oap}, P_{pr}$) from DNIT 008 Table 4.
 4.  Segmentation: Aggregates data by kilometer segments.
 5.  Reporting: Generates a visual HTML report containing:
-    * Bar charts showing the IGGE evolution along the road.
+    * Interactive Multi-Axis Chart: Plots IGGE (Left Axis) vs IES/ICPF (Right Axis) simultaneously for correlation analysis.
     * A Summary Table with the final Concept (Optimal, Good, Fair, Poor, Very Poor).
     * Calculated Indices: Displays IGGE, IES (based on Table 5 Matrix), and estimated ICPF.
-    * Detailed Calculation Memory: A "traceability" table showing exactly how the algorithm reached the final numbers.
-    * (Planned): Display of Normative Reference Tables (DNIT Tables 1-5) within the report for quick consultation.
-6.  Template System: Provides a built-in downloadable Excel template (`modelo_padrao.xlsx`) to ensure correct data entry.
+    * Detailed Calculation Memory: A "traceability" table showing the exact formula used for each segment (e.g., `Weight x % Real`).
+    * Normative Annexes: Embeds the official DNIT 008 Tables (1 to 5) directly in the report footer for immediate technical consultation.6.  Template System: Provides a built-in downloadable Excel template (`modelo_padrao.xlsx`) to ensure correct data entry.
 7.  Clean Slate Protocol: Automatically cleans old files upon startup to save server storage.
 
 ## 🛠️ Technologies Used
@@ -39,16 +37,15 @@ This project relies on a robust Python stack for data analysis and a lightweight
 The goal of this project is to provide Transport Engineers in Brazil with a **reliable, open, and fast tool** to interpret pavement surveys. By automating the PRO-008 standard, we aim to eliminate human error in extensive road network calculations and provide instant, report-ready visualizations for infrastructure planning.
 
 ## 📍 Project Status
-Current Version: `2.1.0` (Feature Complete)
+Current Version: `2.2.0` (Enhanced Reporting & Flex Input)
 
-The software architecture, database structure, and web interface are fully implemented and functional. The application successfully reads files, processes logic, and renders reports.
+The software architecture is fully functional, featuring dynamic chart plotting, flexible data processing options (Incidence/Counting), and embedded normative references.
 
 ## ⚠️ Known Issues & Improvements (Read Carefully)
 While the software is functionally stable, the following points require attention before professional deployment:
 
 1.  Methodological Validation (Critical):
-    * The system uses an automated technical approximation to convert Area ($m^2$) into Extension (%). While mathematically sound for engineering estimates, the "Calculation Memory" must be cross-checked against a manual control dataset to validate the conversion factors (Assumed: Lane Width = 3.5m, Station = 20m).
-
+    * The system uses an automated technical approximation to convert Area ($m^2$) into Extension (%). The current algorithm assumes a Double Lane Width (7.0m) for the segment area calculation. Users surveying single lanes (3.5m) should be aware that the percentage results might appear halved unless the code constant is adjusted.
 2.  Column Mapping:
     * The system uses a hardcoded index mapping (defined in the `INDICES` dictionary). Any changes to the Excel column order require updating the source code.
 
