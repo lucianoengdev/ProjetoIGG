@@ -99,7 +99,7 @@ def normalizar_para_float(valor):
     try: return float(valor_str)
     except ValueError: return 0.0
 
-def calcular_igge_pro008(df, upload_id):
+def calcular_igge_pro008(df, upload_id, metodo_panelas):
     db = get_db()
     cursor = db.cursor()
 
@@ -129,12 +129,15 @@ def calcular_igge_pro008(df, upload_id):
     areas_deform = []
     qtds_panela = []
 
+    modo_panela_escolhido = 'soma_real' if metodo_panelas == 'contagem' else 'binario'
+
     for i in range(len(df)):
         areas_trinca.append(processar_grupo(i, INDICES['trincas'], modo='soma_real'))
         
         areas_deform.append(processar_grupo(i, INDICES['deformacoes'], modo='soma_real'))
         
-        qtds_panela.append(processar_grupo(i, INDICES['panelas_remendos'], modo='binario'))
+        qtds_panela.append(processar_grupo(i, INDICES['panelas_remendos'], modo=modo_panela_escolhido))
+
 
     df_proc['area_trinca'] = areas_trinca
     df_proc['area_deform'] = areas_deform
@@ -148,7 +151,7 @@ def calcular_igge_pro008(df, upload_id):
         'soma_area_trinca': x['area_trinca'].sum(),
         'soma_area_deform': x['area_deform'].sum(),
         
-        'qtd_total_panelas_remendos': x['qtd_panelas'].sum()
+        'qtd_total_panelas_remendos': round(x['qtd_panelas'].sum(), 0)
     }), include_groups=False).reset_index()
 
     # 3. CÁLCULO DAS FREQUÊNCIAS (% e Quantidade)
@@ -252,6 +255,8 @@ def index():
         try: linha_inicial = int(request.form.get('linha_inicial', 1))
         except: linha_inicial = 1
 
+        metodo_panelas = request.form.get('metodo_panelas', 'incidencia')
+
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
@@ -260,7 +265,7 @@ def index():
             session['upload_id'] = uid
             try:
                 df = pd.read_excel(filepath, header=None, skiprows=linha_inicial-1, dtype=object)
-                calcular_igge_pro008(df, uid)
+                calcular_igge_pro008(df, uid, metodo_panelas)
                 return redirect(url_for('relatorio', id=uid))
             except Exception as e:
                 return render_template('index.html', error=str(e))
