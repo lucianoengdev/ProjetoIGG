@@ -42,7 +42,7 @@
         <div class="card-body">
             <canvas id="mainChart" height="100"></canvas>
             <div class="text-center mt-2 small text-muted">
-                <span class="badge bg-primary">IGGE</span> Eixo Esquerdo (0-100) &nbsp;|&nbsp; 
+                <span class="badge bg-primary">IGGE</span> Eixo Esquerdo (0-500) &nbsp;|&nbsp; 
                 <span class="badge bg-warning text-dark">IES</span> <span class="badge bg-success">ICPF</span> Eixo Direito (0-10)
             </div>
         </div>
@@ -111,19 +111,25 @@
                         <tr>
                             <td class="fw-bold">{{ row.km_inicial }}</td>
                             
-                            <td class="small">{{ row.qtd_trincas }}m²</td>
+                            <td class="small">{{ "%.1f"|format(row.qtd_trincas) }}m²</td>
                             <td>{{ "%.1f"|format(row.pct_trincas) }}%</td>
-                            <td>{{ row.pt }}</td>
+                            <td class="fw-bold">{{ row.freq_trincas }} <span class="text-muted fw-normal">({{ row.grav_trincas }})</span></td>
 
-                            <td class="small">{{ row.qtd_deformacoes }}m²</td>
+                            <td class="small">{{ "%.1f"|format(row.qtd_deformacoes) }}m²</td>
                             <td>{{ "%.1f"|format(row.pct_deformacoes) }}%</td>
-                            <td>{{ row.poap }}</td>
+                            <td class="fw-bold">{{ row.freq_deformacoes }} <span class="text-muted fw-normal">({{ row.grav_deformacoes }})</span></td>
 
                             <td>{{ row.qtd_panelas }}</td>
-                            <td>{{ row.ppr }}</td>
+                            <td class="fw-bold">{{ row.freq_panelas }} <span class="text-muted fw-normal">({{ row.grav_panelas }})</span></td>
 
                             <td class="text-start font-monospace small" style="font-size: 0.75em;">
-                                (0.35×{{ row.pt }})+(0.60×{{ row.poap }})+(0.70×{{ row.ppr }}) = <b>{{ "%.0f"|format(row.igge) }}</b>
+                                ({{ row.grav_trincas }} × {{ "%.1f"|format(row.pct_trincas) }}) + <br>
+                                
+                                ({{ row.grav_deformacoes }} × {{ "%.1f"|format(row.pct_deformacoes) }}) + <br>
+                                
+                                ({{ row.grav_panelas }} × {{ row.qtd_panelas }}) <br>
+                                
+                                = <b>{{ "%.0f"|format(row.igge) }}</b>
                             </td>
                         </tr>
                         {% endfor %}
@@ -133,23 +139,24 @@
         </div>
     </div>
 
-    <div class="d-print-break-before"> <h4 class="mb-4 text-primary fw-bold">Anexos: Tabelas de Referência (DNIT 008/2003)</h4>
+    <div class="d-print-break-before"> 
+        <h4 class="mb-4 text-primary fw-bold">Anexos: Tabelas de Referência (DNIT 008/2003)</h4>
         
         <div class="row g-4">
             <div class="col-md-6">
                 <div class="card h-100">
-                    <div class="card-header fw-bold">Tabela 1 e 3 - Frequência e Gravidade</div>
+                    <div class="card-header fw-bold">Tabela 1 - Frequência</div>
                     <div class="card-body text-center">
                         <img src="{{ url_for('static', filename='Tabela1.png') }}" class="img-fluid img-tabela" alt="Tabela 1">
-                        <img src="{{ url_for('static', filename='Tabela3.png') }}" class="img-fluid img-tabela" alt="Tabela 3">
                     </div>
                 </div>
             </div>
             <div class="col-md-6">
                 <div class="card h-100">
-                    <div class="card-header fw-bold">Tabela 2 - Conceitos</div>
+                    <div class="card-header fw-bold">Tabela 2 e 3 - Conceitos e Gravidade</div>
                     <div class="card-body text-center">
                         <img src="{{ url_for('static', filename='Tabela2.png') }}" class="img-fluid img-tabela mb-2" alt="Tabela 2">
+                        <img src="{{ url_for('static', filename='Tabela3.png') }}" class="img-fluid img-tabela" alt="Tabela 3">
                     </div>
                 </div>
             </div>
@@ -179,7 +186,7 @@
     const ctx = document.getElementById('mainChart').getContext('2d');
     
     new Chart(ctx, {
-        type: 'bar', // Tipo base (mas misturamos linha e barra nos datasets)
+        type: 'bar', 
         data: chartData,
         options: {
             responsive: true,
@@ -194,8 +201,7 @@
                         usePointStyle: true,
                         padding: 20,
                         font: { size: 12 }
-                    },
-                    // O Chart.js já permite clicar na legenda para ocultar/mostrar nativamente!
+                    }
                 },
                 tooltip: {
                     callbacks: {
@@ -211,15 +217,15 @@
                 }
             },
             scales: {
-                y: { // Eixo Esquerdo (IGGE)
+                y: { 
                     type: 'linear',
                     display: true,
                     position: 'left',
-                    title: { display: true, text: 'IGGE (Escala 0-100)' },
-                    suggestedMax: 100,
-                    grid: { drawOnChartArea: false } // Grade apenas no direito para não poluir
+                    title: { display: true, text: 'IGGE (Escala 0-500)' },
+                    suggestedMax: 150,
+                    grid: { drawOnChartArea: false } 
                 },
-                y1: { // Eixo Direito (IES/ICPF)
+                y1: { 
                     type: 'linear',
                     display: true,
                     position: 'right',
