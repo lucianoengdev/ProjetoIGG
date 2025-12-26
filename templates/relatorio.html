@@ -32,6 +32,9 @@
         <div class="d-print-none">
             <a href="/" class="btn btn-outline-secondary btn-sm">Nova Análise</a>
             <button onclick="window.print()" class="btn btn-primary btn-sm">🖨️ Imprimir / PDF</button>
+            <a href="{{ url_for('exportar_relatorio', id=resultados[0]['upload_id']) }}" class="btn btn-success btn-sm ms-2">
+                <i class="bi bi-file-earmark-spreadsheet"></i> Baixar Anexo em Excel
+            </a>
         </div>
     </div>
 
@@ -221,7 +224,7 @@
                     type: 'linear',
                     display: true,
                     position: 'left',
-                    title: { display: true, text: 'IGGE (Escala 0-500)' },
+                    title: { display: true, text: 'IGGE (Escala 0-100)' },
                     suggestedMax: 150,
                     grid: { drawOnChartArea: false } 
                 },
