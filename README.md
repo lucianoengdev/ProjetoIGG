@@ -18,10 +18,9 @@ This application replaces manual calculation spreadsheets with an automated, dat
 4.  Segmentation: Aggregates data by kilometer segments.
 5.  Reporting: Generates a visual HTML report containing:
     * Interactive Multi-Axis Chart: Plots IGGE (Left Axis) vs IES/ICPF (Right Axis) simultaneously for correlation analysis.
-    * A Summary Table with the final Concept (Optimal, Good, Fair, Poor, Very Poor).
+    * Official DNIT Export (.xlsx): Generates the Anexo C (Calculation Memory) strictly following the visual layout and mathematical rules of PRO-008 (Weight × Frequency), ready for official filing.
     * Calculated Indices: Displays IGGE, IES (based on Table 5 Matrix), and estimated ICPF.
-    * Detailed Calculation Memory: A "traceability" table showing the exact formula used for each segment (e.g., `Weight x % Real`).
-    * Normative Annexes: Embeds the official DNIT 008 Tables (1 to 5) directly in the report footer for immediate technical consultation.6.  Template System: Provides a built-in downloadable Excel template (`modelo_padrao.xlsx`) to ensure correct data entry.
+    * Normative Annexes: Embeds the official DNIT 008 Tables (1 to 5) directly in the report footer for immediate technical consultation.
 7.  Clean Slate Protocol: Automatically cleans old files upon startup to save server storage.
 
 ## 🛠️ Technologies Used
@@ -34,10 +33,10 @@ This project relies on a robust Python stack for data analysis and a lightweight
 * Format Handling: OpenPyXL (Excel integration).
 
 ## 🚀 Project Ambition
-The goal of this project is to provide Transport Engineers in Brazil with a **reliable, open, and fast tool** to interpret pavement surveys. By automating the PRO-008 standard, we aim to eliminate human error in extensive road network calculations and provide instant, report-ready visualizations for infrastructure planning.
+The goal of this project is to provide Transport Engineers in Brazil with a reliable, open, and fast tool to interpret pavement surveys. By automating the PRO-008 standard, we aim to eliminate human error in extensive road network calculations and provide instant, report-ready visualizations for infrastructure planning.
 
 ## 📍 Project Status
-Current Version: `2.2.0` (Enhanced Reporting & Flex Input)
+Current Version: `2.3.0` (Enhanced Reporting & Flex Input)
 
 The software architecture is fully functional, featuring dynamic chart plotting, flexible data processing options (Incidence/Counting), and embedded normative references.
 
@@ -48,6 +47,8 @@ While the software is functionally stable, the following points require attentio
     * The system uses an automated technical approximation to convert Area ($m^2$) into Extension (%). The current algorithm assumes a Double Lane Width (7.0m) for the segment area calculation. Users surveying single lanes (3.5m) should be aware that the percentage results might appear halved unless the code constant is adjusted.
 2.  Column Mapping:
     * The system uses a hardcoded index mapping (defined in the `INDICES` dictionary). Any changes to the Excel column order require updating the source code.
+3.  * Official DNIT Export (.xlsx): 
+    * Generates the Anexos B and D from regulation
 
 ---
 
