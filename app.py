@@ -5,9 +5,10 @@ import os
 import glob
 import io
 import numpy as np
-from flask import Flask, render_template, request, redirect, url_for, session, g, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, session, g, send_from_directory, send_file
 from werkzeug.utils import secure_filename
-
+from openpyxl import load_workbook
+from openpyxl.styles import Alignment
 """
 ==================================================================================
 NOTA TÉCNICA E METODOLÓGICA (DNIT 008/2003 - PRO)
@@ -284,19 +285,19 @@ def relatorio(id):
                 'backgroundColor': 'rgba(13, 110, 253, 0.5)',
                 'borderColor': 'rgba(13, 110, 253, 1)',
                 'borderWidth': 1,
-                'type': 'bar', # IGGE fica melhor como Barra
-                'yAxisID': 'y', # Eixo Esquerdo (0-500)
+                'type': 'bar', 
+                'yAxisID': 'y', 
                 'order': 2
             },
             {
                 'label': 'IES (Estado da Superfície)',
                 'data': [r['ies'] for r in res],
-                'backgroundColor': 'rgba(255, 193, 7, 1)', # Amarelo Ouro
+                'backgroundColor': 'rgba(255, 193, 7, 1)', 
                 'borderColor': 'rgba(255, 193, 7, 1)',
                 'borderWidth': 3,
-                'type': 'line', # IES como Linha para destacar
-                'tension': 0.3, # Suavização da linha
-                'yAxisID': 'y1', # Eixo Direito (0-10)
+                'type': 'line',
+                'tension': 0.3, 
+                'yAxisID': 'y1', 
                 'order': 1
             },
             {
@@ -307,7 +308,7 @@ def relatorio(id):
                 'borderWidth': 3,
                 'type': 'line',
                 'tension': 0.3,
-                'yAxisID': 'y1', # Eixo Direito (0-10)
+                'yAxisID': 'y1',
                 'order': 0
             }
         ]
@@ -320,6 +321,79 @@ def download_modelo():
         return send_from_directory(directory='static', path='modelo_padrao.xlsx', as_attachment=True)
     except FileNotFoundError:
         return "ERRO: Arquivo 'modelo_padrao.xlsx' não encontrado na pasta 'static'."
+    
+@app.route('/exportar_relatorio/<id>')
+def exportar_relatorio(id):
+    db = get_db()
+    resultados = db.execute("SELECT * FROM resultados_pro008 WHERE upload_id = ? ORDER BY km_inicial", (id,)).fetchall()
+    
+    if not resultados:
+        return "Sem dados para exportar.", 404
+
+    caminho_template = os.path.join(app.config['UPLOAD_FOLDER'], '../static/template_exportacao.xlsx')
+    
+    wb = load_workbook(caminho_template)
+    ws_c = wb['anexo_c'] 
+    
+    linha_atual = 10
+    total_linhas = len(resultados)
+
+    for i, row in enumerate(resultados):
+        km_ini = row['km_inicial']
+        
+        eh_ultimo = (i == total_linhas - 1)
+        
+        if eh_ultimo:
+            extensao_real = row['total_estacas'] * 0.02
+            km_fim = km_ini + extensao_real
+        else:
+            km_fim = row['km_inicial'] + 1.0
+
+        estaca_inicial = round(km_ini / 0.02, 0)
+        estaca_final = round(km_fim / 0.02, 0)
+        extensao = km_fim - km_ini
+
+        fat_trincas = row['grav_trincas'] * row['pct_trincas']
+        fat_deform = row['grav_deformacoes'] * row['pct_deformacoes']
+        fat_panelas = row['grav_panelas'] * row['qtd_panelas']
+
+        # --- 3. PREENCHIMENTO DAS CÉLULAS (A até P) ---
+        ws_c.cell(row=linha_atual, column=1).value = km_ini
+        ws_c.cell(row=linha_atual, column=2).value = estaca_inicial
+        ws_c.cell(row=linha_atual, column=3).value = estaca_final
+        ws_c.cell(row=linha_atual, column=4).value = km_ini
+        ws_c.cell(row=linha_atual, column=5).value = km_fim
+        ws_c.cell(row=linha_atual, column=6).value = extensao
+        ws_c.cell(row=linha_atual, column=7).value = row['pct_trincas']
+        ws_c.cell(row=linha_atual, column=8).value = row['grav_trincas']
+        ws_c.cell(row=linha_atual, column=9).value = fat_trincas
+        ws_c.cell(row=linha_atual, column=10).value = row['pct_deformacoes']
+        ws_c.cell(row=linha_atual, column=11).value = row['grav_deformacoes']
+        ws_c.cell(row=linha_atual, column=12).value = fat_deform
+        ws_c.cell(row=linha_atual, column=13).value = row['qtd_panelas']
+        ws_c.cell(row=linha_atual, column=14).value = row['grav_panelas']
+        ws_c.cell(row=linha_atual, column=15).value = fat_panelas
+        ws_c.cell(row=linha_atual, column=16).value = row['igge']
+
+        for col in range(1, 17):
+            cell = ws_c.cell(row=linha_atual, column=col)
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+
+            if col in [4, 5, 6, 8, 9, 11, 12, 15]: 
+                cell.number_format = '0.00'
+
+        linha_atual += 1
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=f'Relatorio_DNIT{id}.xlsx'
+    )
 
 if __name__ == '__main__':
     app.run(debug=True)
