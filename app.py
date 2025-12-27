@@ -334,13 +334,21 @@ def exportar_relatorio(id):
     
     wb = load_workbook(caminho_template)
     ws_c = wb['anexo_c'] 
+    ws_d = wb['anexo_d']
     
     linha_atual = 10
     total_linhas = len(resultados)
 
+    mapa_codigo_ies = {
+            0: 'A', 
+            1: 'B', 2: 'B', 
+            3: 'C', 4: 'C', 
+            5: 'D', 7: 'D', 
+            8: 'E', 10: 'E'
+        }
+    
     for i, row in enumerate(resultados):
         km_ini = row['km_inicial']
-        
         eh_ultimo = (i == total_linhas - 1)
         
         if eh_ultimo:
@@ -357,7 +365,7 @@ def exportar_relatorio(id):
         fat_deform = row['grav_deformacoes'] * row['pct_deformacoes']
         fat_panelas = row['grav_panelas'] * row['qtd_panelas']
 
-        # --- 3. PREENCHIMENTO DAS CÉLULAS (A até P) ---
+        # --- 3. PREENCHIMENTO ANEXO C ---
         ws_c.cell(row=linha_atual, column=1).value = km_ini
         ws_c.cell(row=linha_atual, column=2).value = estaca_inicial
         ws_c.cell(row=linha_atual, column=3).value = estaca_final
@@ -381,7 +389,25 @@ def exportar_relatorio(id):
 
             if col in [4, 5, 6, 8, 9, 11, 12, 15]: 
                 cell.number_format = '0.00'
+    
+        # --- 3. PREENCHIMENTO ANEXO D ---
+        ws_d.cell(row=linha_atual, column=1).value = km_ini 
+        ws_d.cell(row=linha_atual, column=2).value = estaca_inicial 
+        ws_d.cell(row=linha_atual, column=3).value = estaca_final 
+        ws_d.cell(row=linha_atual, column=4).value = km_ini 
+        ws_d.cell(row=linha_atual, column=5).value = km_fim
+        ws_d.cell(row=linha_atual, column=6).value = extensao 
+        ws_d.cell(row=linha_atual, column=7).value = row['icpf']
+        ws_d.cell(row=linha_atual, column=8).value = row['igge'] 
+        ws_d.cell(row=linha_atual, column=9).value = row['ies']     
+        codigo_ies = mapa_codigo_ies.get(row['ies'], '-')
+        ws_d.cell(row=linha_atual, column=10).value = codigo_ies
+        ws_d.cell(row=linha_atual, column=11).value = row['conceito']
 
+        for col in range(1, 12):
+            cell = ws_d.cell(row=linha_atual, column=col)
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            if col in [4, 5, 6]: cell.number_format = '0.00' 
         linha_atual += 1
 
     output = io.BytesIO()
